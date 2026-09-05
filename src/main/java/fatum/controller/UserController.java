@@ -2,6 +2,8 @@ package fatum.controller;
 
 import fatum.dto.ActiveUserResponse;
 import fatum.dto.CreateUserRequest;
+import fatum.dto.UserMapper;
+import fatum.dto.UserResponse;
 import fatum.dto.UserStatusResponse;
 import fatum.dto.UserUpdateRequest;
 import fatum.exception.FatumUserException;
@@ -10,7 +12,7 @@ import fatum.service.UserService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -36,50 +38,39 @@ import java.util.List;
 public class UserController {
 
     private final UserService userService;
+    private final UserMapper userMapper;
 
-    @Autowired
-    public UserController(UserService userService) {
+    public UserController(UserService userService, UserMapper userMapper) {
         this.userService = userService;
+        this.userMapper = userMapper;
     }
 
     @PostMapping
-    public ResponseEntity<User> createUser(
+    public ResponseEntity<UserResponse> createUser(
             @AuthenticationPrincipal Jwt jwt,
             @Valid @RequestBody CreateUserRequest request) throws FatumUserException {
-        User newUser = new User(
-                jwt.getSubject(),
-                request.email(),
-                request.names(),
-                request.surnames(),
-                request.phoneNumber(),
-                request.birthDate());
-        return ResponseEntity.status(201).body(userService.createUser(newUser));
+        User newUser = userMapper.toEntity(jwt.getSubject(), request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(toResponse(userService.createUser(newUser)));
     }
 
     @GetMapping("/me")
-    public ResponseEntity<User> getCurrentUser(@AuthenticationPrincipal Jwt jwt)
+    public ResponseEntity<UserResponse> getCurrentUser(@AuthenticationPrincipal Jwt jwt)
             throws FatumUserException {
-        User user = userService.getUserById(jwt.getSubject());
-        enrichProfileImage(user);
-        return ResponseEntity.ok(user);
+        return ResponseEntity.ok(toResponse(userService.getUserById(jwt.getSubject())));
     }
 
     @PutMapping("/me")
-    public ResponseEntity<User> updateCurrentUser(
+    public ResponseEntity<UserResponse> updateCurrentUser(
             @AuthenticationPrincipal Jwt jwt,
             @Valid @RequestBody UserUpdateRequest request) throws FatumUserException {
-        User updated = userService.updateUser(jwt.getSubject(), request);
-        enrichProfileImage(updated);
-        return ResponseEntity.ok(updated);
+        return ResponseEntity.ok(toResponse(userService.updateUser(jwt.getSubject(), request)));
     }
 
     @PutMapping(value = "/me/profile-image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<User> updateProfileImage(
+    public ResponseEntity<UserResponse> updateProfileImage(
             @AuthenticationPrincipal Jwt jwt,
             @RequestParam("image") MultipartFile image) throws FatumUserException, IOException {
-        User updated = userService.updateProfileImage(jwt.getSubject(), image);
-        enrichProfileImage(updated);
-        return ResponseEntity.ok(updated);
+        return ResponseEntity.ok(toResponse(userService.updateProfileImage(jwt.getSubject(), image)));
     }
 
     @GetMapping("/me/authenticated")
@@ -103,25 +94,23 @@ public class UserController {
     }
 
     @GetMapping("/search")
-    public ResponseEntity<List<User>> searchUsers(
+    public ResponseEntity<List<UserResponse>> searchUsers(
             @RequestParam @NotBlank String names,
             @RequestParam @NotBlank String surnames) throws FatumUserException {
-        List<User> users = userService.getUsersByName(names, surnames);
-        users.forEach(this::enrichProfileImage);
+        List<UserResponse> users = userService.getUsersByName(names, surnames).stream()
+                .map(this::toResponse)
+                .toList();
         return ResponseEntity.ok(users);
     }
 
     @GetMapping("/username/{username}")
-    public ResponseEntity<User> getUserByUsername(@PathVariable String username)
+    public ResponseEntity<UserResponse> getUserByUsername(@PathVariable @NotBlank String username)
             throws FatumUserException {
-        User user = userService.getUserByUsername(username);
-        enrichProfileImage(user);
-        return ResponseEntity.ok(user);
+        return ResponseEntity.ok(toResponse(userService.getUserByUsername(username)));
     }
 
-    private void enrichProfileImage(User user) {
-        if (user.getProfileImage() != null) {
-            userService.setProfileImageUrl(user.getProfileImage());
-        }
+    private UserResponse toResponse(User user) {
+        String profileImageUrl = userService.getProfileImageUrl(user.getProfileImage());
+        return userMapper.toResponse(user, profileImageUrl);
     }
 }

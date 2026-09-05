@@ -1,6 +1,5 @@
 package fatum.model;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -10,42 +9,44 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
-import jakarta.persistence.Transient;
+import lombok.AccessLevel;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import lombok.Setter;
 
 @Entity
 @Table(name = "PROFILE_IMAGES")
 @Getter
-@NoArgsConstructor
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 @EqualsAndHashCode(onlyExplicitlyIncluded = true)
 public class ProfileImage {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     @EqualsAndHashCode.Include
+    @Column(name = "ID", length = 36)
     private String id;
 
     @Column(name = "IMAGE_KEY", nullable = false, length = 255)
     private String imageKey;
 
-    @Transient
-    @Setter
-    private String presignedUrl;
-
-    @OneToOne(fetch = FetchType.LAZY)
+    @OneToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "USER_AUTH0_ID", nullable = false, unique = true)
-    @JsonIgnore
     private User user;
 
-    public ProfileImage(String imageKey, User user) {
-        this.imageKey = imageKey;
+    ProfileImage(String imageKey, User user) {
+        this.imageKey = requireImageKey(imageKey);
         this.user = user;
     }
 
-    public void replaceImageKey(String imageKey) {
-        this.imageKey = imageKey;
+    void replaceImageKey(String imageKey) {
+        this.imageKey = requireImageKey(imageKey);
+    }
+
+    private static String requireImageKey(String imageKey) {
+        if (imageKey == null || imageKey.isBlank()) {
+            throw new IllegalArgumentException("imageKey is required");
+        }
+        return imageKey.trim();
     }
 }

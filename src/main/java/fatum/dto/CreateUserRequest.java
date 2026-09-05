@@ -1,5 +1,6 @@
 package fatum.dto;
 
+import fatum.model.DocumentType;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -8,9 +9,6 @@ import jakarta.validation.constraints.Size;
 
 import java.time.LocalDate;
 
-/**
- * Payload used to create the user associated with the authenticated JWT subject.
- */
 public record CreateUserRequest(
         @NotBlank(message = "Email is required")
         @Email(message = "Email must be valid")
@@ -31,6 +29,17 @@ public record CreateUserRequest(
 
         @NotNull(message = "Birth date is required")
         @Past(message = "Birth date must be in the past")
-        LocalDate birthDate
+        LocalDate birthDate,
+
+        @NotBlank(message = "Username is required")
+        @Size(max = 15, message = "Username must not exceed 15 characters")
+        String username,
+
+        @NotBlank(message = "Document is required")
+        @Size(max = 30, message = "Document must not exceed 30 characters")
+        String document,
+
+        @NotNull(message = "Document type is required")
+        DocumentType documentType
 ) {
 }

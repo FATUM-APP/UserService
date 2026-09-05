@@ -1,63 +1,101 @@
-# Informe de actualización de UserService
+# Informe de refactor empresarial de UserService
 
-**Objetivo:** adaptar el repositorio actualizado para eliminar el estado documental secundario y reemplazar Google Cloud Storage por Amazon S3.
+**Objetivo:** separar el contrato HTTP del modelo persistente, hacer obligatorios `document` y `documentType`, y administrar el esquema de forma versionada.
 
-## Cambios realizados
+## Qué definía el campo original
 
-| Área | Antes | Ahora |
-| --- | --- | --- |
-| Almacenamiento | Google Cloud Storage (`Storage`, `BlobInfo`, `BlobId`). | AWS SDK v2 con `S3Client` y `S3Presigner`. |
-| Configuración | `gcp.storage.bucket` y `GCS_BUCKET`. | `aws.region`, `aws.s3.bucket`, `AWS_REGION` y `AWS_S3_BUCKET`. |
-| Credenciales | Credenciales por defecto de Google Cloud. | Cadena estándar de credenciales del AWS SDK. |
-| URL de imagen | URL firmada V4 de GCS. | URL prefirmada de lectura de S3 con duración de quince minutos. |
-| Excepciones de infraestructura | `StorageException`. | `SdkException`. |
-| Modelo | No contenía el campo retirado, pero el servicio aún tenía referencias a su método asociado. | Servicio, controller y pruebas sin ese flujo. |
-| API | Incluía `POST /users/me/authenticate-document`. | La ruta fue eliminada. Se conserva `GET /users/me/authenticated`. |
-| Alta | El controller no enviaba el teléfono al constructor actual. | `CreateUserRequest` y `UserController` incluyen `phoneNumber`. |
-
-## Archivos a reemplazar
-
-| Archivo | Motivo |
-| --- | --- |
-| `pom.xml` | Sustituye la dependencia de Google Cloud por el BOM y módulo S3 del AWS SDK v2. |
-| `.env.example` | Reemplaza `GCS_BUCKET` por `AWS_REGION` y `AWS_S3_BUCKET`. |
-| `src/main/resources/application.yaml` | Reemplaza el bloque `gcp` por el bloque `aws`. |
-| `src/main/java/fatum/service/UserService.java` | Implementa carga, eliminación y URLs prefirmadas con S3; elimina el flujo documental retirado. |
-| `src/main/java/fatum/controller/UserController.java` | Elimina el endpoint documental y completa el alta con teléfono. |
-| `src/main/java/fatum/controller/GlobalExceptionHandler.java` | Usa `SdkException` en lugar de la excepción de GCP. |
-| `src/main/java/fatum/dto/CreateUserRequest.java` | Añade el teléfono obligatorio de la entidad actual. |
-| `src/test/java/fatum/UserServiceApplicationTest.java` | Sustituye mocks y propiedades GCP por AWS. |
-| `src/test/java/fatum/model/UserTest.java` | Elimina asserts del estado retirado. |
-| `src/test/java/fatum/controller/UserControllerTest.java` | Actualiza el constructor de alta y elimina la ruta retirada. |
-| `src/test/java/fatum/service/UserServiceTest.java` | Migra mocks de GCP a S3 y prueba cargas, borrados y URLs prefirmadas. |
-| `README.md` y `MIGRATION_REPORT.md` | Actualizan la documentación para no referenciar GCP ni la ruta retirada. |
-
-## Archivo a eliminar
-
-Debe eliminarse `src/main/java/fatum/configuration/CloudStorageConfig.java`. Su reemplazo es `AwsS3Config.java`, que expone los beans `S3Client` y `S3Presigner` usando `AWS_REGION`.
-
-## Reglas S3 implementadas
-
-La imagen nueva se almacena con una clave como `profile-images/<uuid>-<nombre-original>`. Si el usuario ya tenía una imagen, la nueva referencia se persiste y posteriormente se solicita el borrado del objeto anterior. Las respuestas del usuario generan una URL prefirmada de lectura con duración de quince minutos; el bucket puede permanecer privado.
-
-El SDK no recibe credenciales explícitas en el código. Utiliza el mecanismo estándar de AWS, que permite perfiles locales, variables de entorno y roles IAM en los entornos administrados.
-
-## Regla de autenticación del usuario
-
-El modelo conserva `isAuthenticated` e `isActive`, además de `document` y `documentType`. Cuando `authenticate(true)` se invoca, se verifica que exista documento y tipo; cuando se invoca con `false`, el estado se desactiva. Ya no existe un segundo booleano para representar una verificación documental ni un endpoint separado para ejecutar ese flujo.
-
-## Validación
-
-La primera compilación del repositorio actualizado fallaba por un carácter `#` en `UserService.java`. Ese error también fue corregido en el archivo reemplazado. Después de integrar los archivos entregados se debe ejecutar:
-
-```bash
-./mvnw clean verify
+```java
+@NotBlank
+@NotNull
+@Size(max = 30)
+@Column(name = "DOCUMENT", unique = true, length = 30, nullable = false)
+private String document;
 ```
 
-La suite actualizada cubre el arranque del contexto Spring, el controller, el modelo y el servicio con mocks de S3. La validación final se ejecutará sobre el repositorio ya modificado y se incluirá en la entrega.
+| Anotación | Responsabilidad |
+| --- | --- |
+| `@NotBlank` | Bean Validation: rechaza `null`, texto vacío y sólo espacios. |
+| `@NotNull` | Bean Validation: rechaza `null`; es redundante en un `String` que ya tiene `@NotBlank`. |
+| `@Size(max = 30)` | Bean Validation: limita el texto recibido a treinta caracteres. |
+| `@Column(name = "DOCUMENT")` | Mapea el atributo a la columna SQL. |
+| `unique = true` | Expresa unicidad en el esquema. |
+| `length = 30` | Expresa la longitud de la columna de texto. |
+| `nullable = false` | Expresa una restricción `NOT NULL` en persistencia; no sustituye la validación de la API. |
+
+La intuición del usuario era parcialmente correcta: la validación de peticiones debe vivir en DTOs, pero `@Column` y las demás anotaciones JPA sí pertenecen a la entidad. Además, las invariantes esenciales deben protegerse en el dominio y la base de datos, porque no todas las entidades se crean necesariamente desde un controller.[1] [2]
+
+## Arquitectura implementada
+
+| Componente | Decisión |
+| --- | --- |
+| `CreateUserRequest` | Contiene la validación de todos los campos obligatorios, incluido documento y tipo. |
+| `UserUpdateRequest` | Sólo contiene username, teléfono, rol y ciudad; el documento deja de ser actualizable. |
+| `UserResponse` | Define explícitamente el JSON público del usuario. |
+| `ProfileImageResponse` | Contiene la URL prefirmada sin persistirla en JPA. |
+| `UserMapper` | Convierte request a entidad y entidad a response. |
+| `UserController` | Nunca devuelve `User` ni `ProfileImage`; devuelve DTOs. |
+| `User` | Sólo contiene JPA y comportamiento del agregado; no contiene Jackson ni Bean Validation de transporte. |
+| `ProfileImage` | Ya no contiene `@JsonIgnore`, `@Transient` ni `presignedUrl`. |
+| `UserService` | Conserva reglas, unicidad y transacciones; no modifica el documento. |
+| Flyway | Versiona la creación del esquema y el cambio de nulabilidad. |
+
+## Obligatoriedad del documento
+
+La entidad utiliza ahora:
+
+```java
+@Column(name = "DOCUMENT", nullable = false, unique = true, length = 30)
+private String document;
+
+@Enumerated(EnumType.STRING)
+@Column(name = "DOCUMENT_TYPE", nullable = false, length = 20)
+private DocumentType documentType;
+```
+
+El constructor público exige ambos valores y rechaza valores ausentes incluso si la entidad se instancia fuera de la API. El DTO de creación usa `@NotBlank` para `document` y `@NotNull` para `documentType`. Finalmente, Flyway establece `NOT NULL` en PostgreSQL.
+
+> La protección se aplica en tres fronteras: **request**, **dominio** y **base de datos**. Cada una cubre una vía de entrada distinta y no reemplaza a las otras.
+
+## Migración de base de datos
+
+`V1__create_user_schema.sql` crea una base nueva con las restricciones definitivas. Para una base ya existente, `baseline-on-migrate` registra la versión inicial y `V2__require_username_and_document.sql` valida los datos históricos antes de activar `NOT NULL`.[3]
+
+La migración no inventa documentos. Si hay registros incompletos, falla deliberadamente para permitir una estrategia de backfill aprobada por el negocio. La consulta de diagnóstico está incluida en el README.
+
+Las migraciones se ejecutaron también sobre PostgreSQL 16. En una base limpia, `username`, `document` y `document_type` quedaron con `is_nullable = NO`. En una base simulada con un usuario incompleto, `V2` se detuvo antes de alterar el esquema y mostró el mensaje de backfill esperado.
+
+## Correcciones adicionales
+
+El repositorio recibido no compilaba porque el controller utilizaba un constructor de `User` con seis argumentos mientras la entidad actual exigía siete. La creación manual fue reemplazada por `UserMapper` y el nuevo constructor exige nueve campos coherentes con el contrato.
+
+`updateUser` llamaba `setUsername(update.username())` directamente. Cuando el campo se omitía, podía convertir un username obligatorio en `null`. El servicio ahora ignora campos omitidos, valida conflictos y llama métodos explícitos como `changeUsername`, `changePhoneNumber`, `changeRole`, `changeCity` y `deactivate`.
+
+## Validación automatizada
+
+La suite cubre contexto Spring/JPA, controller, validación DTO, mapper/JSON, agregado de dominio, reglas del servicio, restricciones del repositorio y almacenamiento S3. La última ejecución produjo:
+
+| Resultado | Valor |
+| --- | ---: |
+| Pruebas | 35 |
+| Fallos | 0 |
+| Errores | 0 |
+| Omitidas | 0 |
+
+## Archivos principales modificados o nuevos
+
+| Archivo | Tipo |
+| --- | --- |
+| `User.java`, `ProfileImage.java` | Refactor de entidades. |
+| `CreateUserRequest.java`, `UserUpdateRequest.java` | Contratos de entrada. |
+| `UserResponse.java`, `ProfileImageResponse.java`, `UserMapper.java` | Nuevos contratos y mapeo. |
+| `UserController.java`, `UserService.java` | Adaptación de capas. |
+| `V1__create_user_schema.sql`, `V2__require_username_and_document.sql` | Migraciones nuevas. |
+| `pom.xml`, `application.yaml`, `.env.example` | Flyway y validación de esquema. |
+| Pruebas en `src/test/java/fatum` | Cobertura actualizada y ampliada. |
 
 ## Referencias
 
-[1]: https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/examples-s3-presign.html "AWS SDK for Java 2.x — S3 pre-signed URLs"
-[2]: https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/credentials-chain.html "AWS SDK for Java 2.x — Default credentials provider chain"
-[3]: https://gitlab.com/ccastano46-group/userservicejava.git "userservicejava actualizado"
+[1]: https://jakarta.ee/specifications/bean-validation/3.0/jakarta-bean-validation-spec-3.0.html "Jakarta Bean Validation 3.0"
+[2]: https://jakarta.ee/specifications/persistence/3.1/jakarta-persistence-spec-3.1 "Jakarta Persistence 3.1"
+[3]: https://documentation.red-gate.com/flyway/flyway-concepts/migrations "Flyway migrations"
+[4]: https://gitlab.com/ccastano46-group/userservicejava.git "userservicejava"

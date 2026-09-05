@@ -14,11 +14,12 @@ public class FatumUserException extends Exception {
     public static final String PHONE_EXISTS = "A user with that phone number already exists";
     public static final String UNDERAGE_USER = "User must be at least 18 years old";
     public static final String DOCUMENT_EXISTS = "A user with that document already exists";
-    public static final String DOCUMENT_NOT_MUTABLE = "Document cannot be changed";
     public static final String DOCUMENT_NOT_AUTHENTICATED = "Document is null or has no type";
-    public static final String DOCUMENT_TYPE_REQUIRED = "Document and document type must be provided together";
     public static final String INVALID_IMAGE = "Profile image is required";
     public static final String INVALID_IMAGE_TYPE = "Only image files are allowed";
+    public static final String INACTIVE = "User is inactive";
+    public static final String DOCUMENT_NOT_MUTABLE = "You cannot change the document type or number";
+    public static final String DOCUMENT_TYPE_REQUIRED = "Document type and number are required";
 
     public FatumUserException(String message) {
         super(message);

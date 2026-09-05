@@ -2,11 +2,11 @@ package fatum.service;
 
 import fatum.dto.UserUpdateRequest;
 import fatum.exception.FatumUserException;
+import fatum.model.DocumentType;
 import fatum.model.ProfileImage;
 import fatum.model.User;
 import fatum.model.UserRole;
 import fatum.repository.UserRepository;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,8 +15,8 @@ import org.springframework.web.multipart.MultipartFile;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
-import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 
@@ -34,7 +34,6 @@ public class UserService {
     private final S3Presigner s3Presigner;
     private final String bucketName;
 
-    @Autowired
     public UserService(
             UserRepository userRepository,
             S3Client s3Client,
@@ -52,65 +51,115 @@ public class UserService {
         return userRepository.save(newUser);
     }
 
+
     public User getUserById(String auth0Id) throws FatumUserException {
-        if (auth0Id == null || auth0Id.isBlank()) throw new FatumUserException(FatumUserException.NULL_VALUE);
-
+        if (auth0Id == null || auth0Id.isBlank()) {
+            throw new FatumUserException(FatumUserException.NULL_VALUE);
+        }
         User user = userRepository.findByAuth0Id(auth0Id);
-        if (user == null) throw new FatumUserException(FatumUserException.USER_NOT_FOUND);
-
+        if (user == null) {
+            throw new FatumUserException(FatumUserException.USER_NOT_FOUND);
+        }
         return user;
     }
+
+    public User getUserByDocument(String document) throws FatumUserException {
+        if (document == null || document.isBlank()) {
+            throw new FatumUserException(FatumUserException.NULL_VALUE);
+        }
+        User user = userRepository.findByAuth0Id(document.trim());
+        if (user == null) {
+            throw new FatumUserException(FatumUserException.USER_NOT_FOUND);
+        }
+        return user;
+    }
+
 
     public User getUserByUsername(String username) throws FatumUserException {
-        if (username == null || username.isBlank()) throw new FatumUserException(FatumUserException.NULL_VALUE);
-
-        User user = userRepository.findByUsername(username);
-        if (user == null) throw new FatumUserException(FatumUserException.USER_NOT_FOUND);
-
+        if (username == null || username.isBlank()) {
+            throw new FatumUserException(FatumUserException.NULL_VALUE);
+        }
+        User user = userRepository.findByUsernameIgnoreCase(username.trim());
+        if (user == null) {
+            throw new FatumUserException(FatumUserException.USER_NOT_FOUND);
+        }
         return user;
     }
+
+    public User getUserByEmail(String email) throws FatumUserException {
+        if (email == null || email.isBlank()) {
+            throw new FatumUserException(FatumUserException.NULL_VALUE);
+        }
+        User user = userRepository.findByEmailIgnoreCase(email.trim());
+        if (user == null) {
+            throw new FatumUserException(FatumUserException.USER_NOT_FOUND);
+        }
+        return user;
+    }
+
+    public User getUserByPhoneNumber(String phoneNumber) throws FatumUserException {
+        if (phoneNumber == null || phoneNumber.isBlank()) {
+            throw new FatumUserException(FatumUserException.NULL_VALUE);
+        }
+        User user = userRepository.findByPhoneNumber(phoneNumber.trim());
+        if (user == null) {
+            throw new FatumUserException(FatumUserException.USER_NOT_FOUND);
+        }
+        return user;
+    }
+
 
     public List<User> getUsersByName(String names, String surnames) throws FatumUserException {
         if (names == null || names.isBlank() || surnames == null || surnames.isBlank()) {
             throw new FatumUserException(FatumUserException.NULL_VALUE);
         }
-        return userRepository.findByNamesIgnoreCaseAndSurnamesIgnoreCase(names, surnames);
+        return userRepository.findByNamesIgnoreCaseAndSurnamesIgnoreCase(names.trim(), surnames.trim());
     }
 
     @Transactional
     public User updateUser(String auth0Id, UserUpdateRequest update) throws FatumUserException {
-        if (update == null || auth0Id == null || auth0Id.isBlank()) {
+        if (update == null) {
             throw new FatumUserException(FatumUserException.NULL_VALUE);
         }
 
         User existingUser = getUserById(auth0Id);
-
-        existingUser.setUsername(update.username());
-        updatePhoneNumber(existingUser, normalize(update.phoneNumber()));
+        updateUsername(existingUser, update.username());
+        updatePhoneNumber(existingUser, update.phoneNumber());
         updateRoleAndCity(existingUser, update);
-        updateDocument(existingUser, update);
-
+        updateDocument(existingUser, update.document(), update.documentType());
         return userRepository.save(existingUser);
     }
 
     @Transactional
     public User updateProfileImage(String auth0Id, MultipartFile newImage)
             throws FatumUserException, IOException {
-        User user = getUserById(auth0Id);
-        validateImage(newImage);
 
+        // 1. Validar y obtener el nombre seguro una sola vez
+        String safeFilename = validateImage(newImage);
+
+        // 2. Buscar al usuario después de validar la entrada
+        User user = getUserById(auth0Id);
+
+        // 3. Guardar la clave anterior para eliminarla después
         String previousImageKey = user.getProfileImage() == null
                 ? null
                 : user.getProfileImage().getImageKey();
-        String imageKey = uploadImage(newImage);
+
+        // 4. Subir la nueva imagen usando el nombre ya validado
+        String imageKey = uploadImage(newImage, safeFilename);
+
+        // 5. Actualizar la relación del usuario con la nueva imagen
         user.setProfileImage(imageKey);
         User savedUser = userRepository.save(user);
 
+        // 6. Eliminar la imagen anterior sólo después de guardar correctamente
         if (previousImageKey != null && !previousImageKey.equals(imageKey)) {
             deleteImage(previousImageKey);
         }
+
         return savedUser;
     }
+
 
     @Transactional
     public void deactivateUser(String auth0Id) throws FatumUserException {
@@ -119,24 +168,26 @@ public class UserService {
         userRepository.save(user);
     }
 
+
     public boolean userIsAuthenticated(String auth0Id) throws FatumUserException {
         return getUserById(auth0Id).isAuthenticated();
     }
 
-    public boolean isUserActiveByEmail(String email) throws FatumUserException {
-        if (email == null || email.isBlank()) {
+
+    public boolean isUserActiveByEmail(String email, String username) throws FatumUserException {
+        if (email == null || email.isBlank() && (username == null || username.isBlank())) {
             throw new FatumUserException(FatumUserException.NULL_VALUE);
         }
-        User user = userRepository.findByEmail(email);
+        User user = email == null || email.isBlank() ? getUserByUsername(username) : getUserByEmail(email);
         if (user == null) {
             throw new FatumUserException(FatumUserException.USER_NOT_FOUND);
         }
         return user.isActive();
     }
 
-    public void setProfileImageUrl(ProfileImage profileImage) {
+    public String getProfileImageUrl(ProfileImage profileImage) {
         if (profileImage == null || profileImage.getImageKey() == null) {
-            return;
+            return null;
         }
         GetObjectRequest getObjectRequest = GetObjectRequest.builder()
                 .bucket(bucketName)
@@ -146,75 +197,51 @@ public class UserService {
                 .signatureDuration(Duration.ofMinutes(15))
                 .getObjectRequest(getObjectRequest)
                 .build();
-        profileImage.setPresignedUrl(s3Presigner.presignGetObject(presignRequest).url().toString());
+        return s3Presigner.presignGetObject(presignRequest).url().toString();
     }
 
     private void updateUsername(User user, String username) throws FatumUserException {
-        if (username == null) {
-            return;
+        String targetUsername = username == null || username.isBlank() ? user.getUsername() : username;
+
+        User conflict = getUserByUsername(targetUsername);
+        if (conflict != null && !conflict.equals(user)) {
+            throw new FatumUserException(FatumUserException.USERNAME_EXISTS);
         }
-        if (!username.equals(user.getUsername())) {
-            User conflict = userRepository.findByUsername(username);
-            if (conflict != null && !conflict.getAuth0Id().equals(user.getAuth0Id())) {
-                throw new FatumUserException(FatumUserException.USERNAME_EXISTS);
-            }
-        }
-        user.setUsername(username);
+        user.setUsername(targetUsername);
     }
 
     private void updatePhoneNumber(User user, String phoneNumber) throws FatumUserException {
-        if (phoneNumber == null) {
-            return;
+        String targetPhoneNumber = phoneNumber == null || phoneNumber.isBlank() ? user.getPhoneNumber() : phoneNumber;
+
+        User conflict = getUserByPhoneNumber(targetPhoneNumber);
+        if (conflict != null && !conflict.equals(user)) {
+            throw new FatumUserException(FatumUserException.PHONE_EXISTS);
         }
-        if (!phoneNumber.equals(user.getPhoneNumber())) {
-            User conflict = userRepository.findByPhoneNumber(phoneNumber);
-            if (conflict != null && !conflict.getAuth0Id().equals(user.getAuth0Id())) {
-                throw new FatumUserException(FatumUserException.PHONE_EXISTS);
-            }
-        }
-        user.setPhoneNumber(phoneNumber);
+        user.setPhoneNumber(targetPhoneNumber);
     }
 
     private void updateRoleAndCity(User user, UserUpdateRequest update) throws FatumUserException {
-        String city = normalize(update.city());
+        String city = update.city();
         UserRole targetRole = update.role() == null ? user.getRole() : update.role();
-        String effectiveCity = city == null ? user.getCity() : city;
+        String effectiveCity = city == null || city.isBlank() ? user.getCity() : city;
 
-        if (targetRole == UserRole.PROFESSIONAL && effectiveCity == null) {
-            throw new FatumUserException(FatumUserException.PROFESSIONAL_CITY);
-        }
-        if (city != null) {
-            user.setCity(city);
-        }
-        if (update.role() != null) {
-            user.setRole(update.role());
-        }
+        user.setCity(effectiveCity);
+        user.setRole(targetRole);
     }
 
-    private void updateDocument(User user, UserUpdateRequest update) throws FatumUserException {
-        String document = normalize(update.document());
-        boolean hasDocument = document != null;
-        boolean hasDocumentType = update.documentType() != null;
+    private void updateDocument(User user, String document, DocumentType documentType) throws FatumUserException {
+        String targetDocument = document == null || document.isBlank() ? user.getDocument() : document;
+        DocumentType targetDocumentType = documentType == null ? user.getDocumentType() : documentType;
 
-        if (hasDocument != hasDocumentType) {
-            throw new FatumUserException(FatumUserException.DOCUMENT_TYPE_REQUIRED);
+        User conflict = getUserByDocument(targetDocument);
+        if (conflict != null && !conflict.equals(user)) {
+            throw new FatumUserException(FatumUserException.PHONE_EXISTS);
         }
-        if (!hasDocument) {
-            return;
-        }
-        if (document.equals(user.getDocument()) && update.documentType() == user.getDocumentType()) {
-            return;
-        }
-        if (user.getDocument() != null) {
-            throw new FatumUserException(FatumUserException.DOCUMENT_NOT_MUTABLE);
-        }
-
-        User conflict = userRepository.findByDocument(document);
-        if (conflict != null && !conflict.getAuth0Id().equals(user.getAuth0Id())) {
-            throw new FatumUserException(FatumUserException.DOCUMENT_EXISTS);
-        }
-        user.setDocument(document, update.documentType());
+        user.setDocument(targetDocument, targetDocumentType);
     }
+
+
+
 
     private void validateNewUser(User user) throws FatumUserException {
 
@@ -230,41 +257,75 @@ public class UserService {
         }
 
         //Check for uniqueness
-        if (userRepository.findByAuth0Id(user.getAuth0Id()) != null)
+        if (getUserById(user.getAuth0Id()) != null)
             throw new FatumUserException(FatumUserException.USER_ALREADY_EXISTS);
 
-        if (userRepository.findByEmail(user.getEmail()) != null)
+        if (getUserByEmail(user.getEmail()) != null)
             throw new FatumUserException(FatumUserException.EMAIL_EXISTS);
 
-        if (userRepository.findByPhoneNumber(user.getPhoneNumber()) != null)
+        if (getUserByPhoneNumber(user.getPhoneNumber()) != null)
             throw new FatumUserException(FatumUserException.PHONE_EXISTS);
+
+        if(user.getDocument() != null && getUserByDocument(user.getDocument()) != null)
+            throw new FatumUserException(FatumUserException.DOCUMENT_EXISTS);
 
         // Check for age
         if (user.getBirthDate().isAfter(LocalDate.now().minusYears(18)))
             throw new FatumUserException(FatumUserException.UNDERAGE_USER);
-
     }
 
-    private void validateImage(MultipartFile image) throws FatumUserException {
-        if (image == null || image.isEmpty() || image.getOriginalFilename() == null) {
+    private String validateImage(MultipartFile image)
+            throws FatumUserException {
+
+        if (image == null || image.isEmpty()) {
             throw new FatumUserException(FatumUserException.INVALID_IMAGE);
         }
-        if (image.getContentType() == null || !image.getContentType().startsWith("image/")) {
+
+        String originalFilename = image.getOriginalFilename();
+        if (originalFilename == null || originalFilename.isBlank()) {
+            throw new FatumUserException(FatumUserException.INVALID_IMAGE);
+        }
+
+        String contentType = image.getContentType();
+        if (contentType == null || !contentType.startsWith("image/")) {
             throw new FatumUserException(FatumUserException.INVALID_IMAGE_TYPE);
         }
+
+        String cleanedFilename = StringUtils.cleanPath(originalFilename);
+        String safeFilename = StringUtils.getFilename(cleanedFilename);
+
+        if (safeFilename == null || safeFilename.isBlank()
+                || safeFilename.equals(".")
+                || safeFilename.equals("..")) {
+            throw new FatumUserException(FatumUserException.INVALID_IMAGE);
+        }
+
+        return safeFilename;
     }
 
-    private String uploadImage(MultipartFile image) throws IOException {
-        String originalFilename = StringUtils.cleanPath(image.getOriginalFilename());
-        String objectName = "profile-images/" + UUID.randomUUID() + "-" + originalFilename;
+
+    private String uploadImage(MultipartFile image, String safeFilename)
+            throws IOException {
+
+        String objectName = "profile-images/"
+                + UUID.randomUUID()
+                + "-"
+                + safeFilename;
+
         PutObjectRequest putObjectRequest = PutObjectRequest.builder()
                 .bucket(bucketName)
                 .key(objectName)
                 .contentType(image.getContentType())
                 .build();
-        s3Client.putObject(putObjectRequest, RequestBody.fromBytes(image.getBytes()));
+
+        s3Client.putObject(
+                putObjectRequest,
+                RequestBody.fromBytes(image.getBytes()));
+
         return objectName;
     }
+
+
 
     private void deleteImage(String imageKey) {
         s3Client.deleteObject(DeleteObjectRequest.builder()
@@ -273,10 +334,4 @@ public class UserService {
                 .build());
     }
 
-    private String normalize(String value) {
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-        return value.trim();
-    }
 }
