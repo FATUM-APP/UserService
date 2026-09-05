@@ -21,9 +21,21 @@
     <properties>
         <java.version>21</java.version>
         <lombok.version>1.18.38</lombok.version>
-        <google-cloud-storage.version>2.40.1</google-cloud-storage.version>
+        <aws.sdk.version>2.25.0</aws.sdk.version>
         <springdoc.version>2.5.0</springdoc.version>
     </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>software.amazon.awssdk</groupId>
+                <artifactId>bom</artifactId>
+                <version>${aws.sdk.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
         <dependency>
@@ -64,9 +76,8 @@
         </dependency>
 
         <dependency>
-            <groupId>com.google.cloud</groupId>
-            <artifactId>google-cloud-storage</artifactId>
-            <version>${google-cloud-storage.version}</version>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
         </dependency>
 
         <dependency>

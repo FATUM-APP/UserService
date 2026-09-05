@@ -31,9 +31,10 @@ auth0:
   domain: ${AUTH0_DOMAIN}
   audience: ${AUTH0_AUDIENCE}
 
-gcp:
-  storage:
-    bucket: ${GCS_BUCKET}
+aws:
+  region: ${AWS_REGION:us-east-1}
+  s3:
+    bucket: ${AWS_S3_BUCKET}
 
 app:
   cors:

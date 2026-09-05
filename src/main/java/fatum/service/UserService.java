@@ -1,8 +1,5 @@
 package fatum.service;
 
-import com.google.cloud.storage.BlobId;
-import com.google.cloud.storage.BlobInfo;
-import com.google.cloud.storage.Storage;
 import fatum.dto.UserUpdateRequest;
 import fatum.exception.FatumUserException;
 import fatum.model.ProfileImage;
@@ -15,62 +12,61 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
+import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
+import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.presigner.S3Presigner;
+import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 
 import java.io.IOException;
-import java.net.URL;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 
 @Service
 public class UserService {
 
     private final UserRepository userRepository;
-    private final Storage storage;
+    private final S3Client s3Client;
+    private final S3Presigner s3Presigner;
     private final String bucketName;
 
     @Autowired
     public UserService(
             UserRepository userRepository,
-            Storage storage,
-            @Value("${gcp.storage.bucket}") String bucketName) {
+            S3Client s3Client,
+            S3Presigner s3Presigner,
+            @Value("${aws.s3.bucket}") String bucketName) {
         this.userRepository = userRepository;
-        this.storage = storage;
+        this.s3Client = s3Client;
+        this.s3Presigner = s3Presigner;
         this.bucketName = bucketName;
     }
 
     @Transactional
     public User createUser(User newUser) throws FatumUserException {
         validateNewUser(newUser);
-        if (userRepository.findByAuth0Id(newUser.getAuth0Id()) != null) {
-            throw new FatumUserException(FatumUserException.USER_ALREADY_EXISTS);
-        }
-        if (userRepository.findByEmail(newUser.getEmail()) != null) { #
-            throw new FatumUserException(FatumUserException.EMAIL_EXISTS);
-        }
         return userRepository.save(newUser);
     }
 
     public User getUserById(String auth0Id) throws FatumUserException {
-        if (auth0Id == null || auth0Id.isBlank()) {
-            throw new FatumUserException(FatumUserException.NULL_VALUE);
-        }
+        if (auth0Id == null || auth0Id.isBlank()) throw new FatumUserException(FatumUserException.NULL_VALUE);
+
         User user = userRepository.findByAuth0Id(auth0Id);
-        if (user == null) {
-            throw new FatumUserException(FatumUserException.USER_NOT_FOUND);
-        }
+        if (user == null) throw new FatumUserException(FatumUserException.USER_NOT_FOUND);
+
         return user;
     }
 
     public User getUserByUsername(String username) throws FatumUserException {
-        if (username == null || username.isBlank()) {
-            throw new FatumUserException(FatumUserException.NULL_VALUE);
-        }
+        if (username == null || username.isBlank()) throw new FatumUserException(FatumUserException.NULL_VALUE);
+
         User user = userRepository.findByUsername(username);
-        if (user == null) {
-            throw new FatumUserException(FatumUserException.USER_NOT_FOUND);
-        }
+        if (user == null) throw new FatumUserException(FatumUserException.USER_NOT_FOUND);
+
         return user;
     }
 
@@ -83,17 +79,17 @@ public class UserService {
 
     @Transactional
     public User updateUser(String auth0Id, UserUpdateRequest update) throws FatumUserException {
-        if (update == null) {
+        if (update == null || auth0Id == null || auth0Id.isBlank()) {
             throw new FatumUserException(FatumUserException.NULL_VALUE);
         }
 
         User existingUser = getUserById(auth0Id);
-        updateUsername(existingUser, normalize(update.username()));
+
+        existingUser.setUsername(update.username());
         updatePhoneNumber(existingUser, normalize(update.phoneNumber()));
         updateRoleAndCity(existingUser, update);
         updateDocument(existingUser, update);
 
-        existingUser.authenticate();
         return userRepository.save(existingUser);
     }
 
@@ -111,17 +107,9 @@ public class UserService {
         User savedUser = userRepository.save(user);
 
         if (previousImageKey != null && !previousImageKey.equals(imageKey)) {
-            storage.delete(BlobId.of(bucketName, previousImageKey));
+            deleteImage(previousImageKey);
         }
         return savedUser;
-    }
-
-    @Transactional
-    public boolean authenticateUserDocument(String auth0Id) throws FatumUserException {
-        User user = getUserById(auth0Id);
-        user.authenticateDocument();
-        user.authenticate();
-        return userRepository.save(user).isDocumentIsAuthenticated();
     }
 
     @Transactional
@@ -150,13 +138,15 @@ public class UserService {
         if (profileImage == null || profileImage.getImageKey() == null) {
             return;
         }
-        BlobInfo blobInfo = BlobInfo.newBuilder(bucketName, profileImage.getImageKey()).build();
-        URL signedUrl = storage.signUrl(
-                blobInfo,
-                15,
-                TimeUnit.MINUTES,
-                Storage.SignUrlOption.withV4Signature());
-        profileImage.setPresignedUrl(signedUrl.toString());
+        GetObjectRequest getObjectRequest = GetObjectRequest.builder()
+                .bucket(bucketName)
+                .key(profileImage.getImageKey())
+                .build();
+        GetObjectPresignRequest presignRequest = GetObjectPresignRequest.builder()
+                .signatureDuration(Duration.ofMinutes(15))
+                .getObjectRequest(getObjectRequest)
+                .build();
+        profileImage.setPresignedUrl(s3Presigner.presignGetObject(presignRequest).url().toString());
     }
 
     private void updateUsername(User user, String username) throws FatumUserException {
@@ -227,21 +217,32 @@ public class UserService {
     }
 
     private void validateNewUser(User user) throws FatumUserException {
+
+        // Check for null values
         if (user == null
-                || user.getAuth0Id() == null
-                || user.getAuth0Id().isBlank()
-                || user.getEmail() == null
-                || user.getEmail().isBlank()
-                || user.getNames() == null
-                || user.getNames().isBlank()
-                || user.getSurnames() == null
-                || user.getSurnames().isBlank()
+                || user.getAuth0Id() == null || user.getAuth0Id().isBlank()
+                || user.getEmail() == null || user.getEmail().isBlank()
+                || user.getNames() == null || user.getNames().isBlank()
+                || user.getSurnames() == null || user.getSurnames().isBlank()
+                || user.getPhoneNumber() == null || user.getPhoneNumber().isBlank()
                 || user.getBirthDate() == null) {
             throw new FatumUserException(FatumUserException.NULL_VALUE);
         }
-        if (user.getBirthDate().isAfter(LocalDate.now().minusYears(18))) {
+
+        //Check for uniqueness
+        if (userRepository.findByAuth0Id(user.getAuth0Id()) != null)
+            throw new FatumUserException(FatumUserException.USER_ALREADY_EXISTS);
+
+        if (userRepository.findByEmail(user.getEmail()) != null)
+            throw new FatumUserException(FatumUserException.EMAIL_EXISTS);
+
+        if (userRepository.findByPhoneNumber(user.getPhoneNumber()) != null)
+            throw new FatumUserException(FatumUserException.PHONE_EXISTS);
+
+        // Check for age
+        if (user.getBirthDate().isAfter(LocalDate.now().minusYears(18)))
             throw new FatumUserException(FatumUserException.UNDERAGE_USER);
-        }
+
     }
 
     private void validateImage(MultipartFile image) throws FatumUserException {
@@ -256,12 +257,20 @@ public class UserService {
     private String uploadImage(MultipartFile image) throws IOException {
         String originalFilename = StringUtils.cleanPath(image.getOriginalFilename());
         String objectName = "profile-images/" + UUID.randomUUID() + "-" + originalFilename;
-        BlobId blobId = BlobId.of(bucketName, objectName);
-        BlobInfo blobInfo = BlobInfo.newBuilder(blobId)
-                .setContentType(image.getContentType())
+        PutObjectRequest putObjectRequest = PutObjectRequest.builder()
+                .bucket(bucketName)
+                .key(objectName)
+                .contentType(image.getContentType())
                 .build();
-        storage.create(blobInfo, image.getBytes());
+        s3Client.putObject(putObjectRequest, RequestBody.fromBytes(image.getBytes()));
         return objectName;
+    }
+
+    private void deleteImage(String imageKey) {
+        s3Client.deleteObject(DeleteObjectRequest.builder()
+                .bucket(bucketName)
+                .key(imageKey)
+                .build());
     }
 
     private String normalize(String value) {

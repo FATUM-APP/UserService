@@ -1,6 +1,6 @@
 package fatum.controller;
 
-import com.google.cloud.storage.StorageException;
+import software.amazon.awssdk.core.exception.SdkException;
 import fatum.dto.ApiError;
 import fatum.exception.FatumUserException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -76,7 +76,7 @@ public class GlobalExceptionHandler {
                 Map.of());
     }
 
-    @ExceptionHandler({IOException.class, StorageException.class})
+    @ExceptionHandler({IOException.class, SdkException.class})
     public ResponseEntity<ApiError> handleStorageError(
             Exception exception,
             HttpServletRequest request) {

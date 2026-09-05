@@ -1,6 +1,5 @@
 package fatum.model;
 
-import com.fasterxml.jackson.annotation.JsonGetter;
 import fatum.exception.FatumUserException;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
@@ -12,9 +11,8 @@ import jakarta.persistence.Id;
 import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
 import jakarta.validation.constraints.Email;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import lombok.AccessLevel;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -25,7 +23,7 @@ import java.time.LocalDate;
 @Entity
 @Table(name = "USERS")
 @Getter
-@NoArgsConstructor
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 @EqualsAndHashCode(onlyExplicitlyIncluded = true)
 public class User {
 
@@ -34,30 +32,30 @@ public class User {
     @Column(name = "AUTH0_ID", nullable = false, length = 255)
     private String auth0Id;
 
-    @NotBlank
     @Email
     @Size(max = 100)
     @Column(name = "EMAIL", nullable = false, unique = true, length = 100)
     private String email;
 
-    @NotBlank
+
     @Size(max = 70)
     @Column(name = "NAMES", nullable = false, length = 70)
     private String names;
 
-    @NotBlank
+
     @Size(max = 70)
     @Column(name = "SURNAMES", nullable = false, length = 70)
     private String surnames;
 
-    @NotNull
     @Column(name = "BIRTH_DATE", nullable = false)
     private LocalDate birthDate;
 
+
     @Size(max = 15)
     @Setter
-    @Column(name = "USERNAME", unique = true, length = 15)
+    @Column(name = "USERNAME", unique = true, length = 15, nullable = false)
     private String username;
+
 
     @Size(max = 20)
     @Setter
@@ -68,6 +66,7 @@ public class User {
     @Column(name = "ROLE", nullable = false, length = 20)
     private UserRole role = UserRole.CLIENT;
 
+    @Setter
     @Column(name = "IS_AUTHENTICATED", nullable = false)
     private boolean isAuthenticated;
 
@@ -75,6 +74,7 @@ public class User {
     @Column(name = "IS_ACTIVE", nullable = false)
     private boolean isActive;
 
+    // Nulables: Permiten el flujo KYC progresivo donde el escaneo es posterior
     @Size(max = 30)
     @Column(name = "DOCUMENT", unique = true, length = 30)
     private String document;
@@ -82,7 +82,6 @@ public class User {
     @Enumerated(EnumType.STRING)
     @Column(name = "DOCUMENT_TYPE", length = 20)
     private DocumentType documentType;
-
 
     @Size(max = 50)
     @Column(name = "CITY", length = 50)
@@ -97,32 +96,26 @@ public class User {
             String names,
             String surnames,
             String phoneNumber,
-            LocalDate birthDate) {
+            LocalDate birthDate,
+            String username) {
         this.auth0Id = auth0Id;
-        this.email = email;
-        this.names = names;
-        this.surnames = surnames;
-        this.phoneNumber = phoneNumber;
+        // Validaciones defensivas por si se instancia internamente sin pasar por el DTO
+        this.email = email != null ? email.trim().toLowerCase() : null;
+        this.names = names != null ? names.trim().toUpperCase() : null;
+        this.surnames = surnames != null ? surnames.trim().toUpperCase() : null;
+        this.phoneNumber = phoneNumber != null ? phoneNumber.trim() : null;
         this.birthDate = birthDate;
+        this.username = username != null ? username.trim() : null;
+
+        // Única fuente de verdad para los valores por defecto
         this.isAuthenticated = false;
         this.isActive = true;
     }
 
-    @JsonGetter("isAuthenticated")
-    public boolean isAuthenticated() {
-        return isAuthenticated;
-    }
-
-    @JsonGetter("isActive")
-    public boolean isActive() {
-        return isActive;
-    }
-
-
-    public boolean authenticate(boolean isAuthenticated) throws FatumUserException{
-        if(isAuthenticated &&
-                (this.document == null || this.document.isBlank() || this.documentType == null))
+    public boolean authenticate(boolean isAuthenticated) throws FatumUserException {
+        if (isAuthenticated && (this.document == null || this.document.isBlank() || this.documentType == null)) {
             throw new FatumUserException(FatumUserException.DOCUMENT_NOT_AUTHENTICATED);
+        }
         this.isAuthenticated = isAuthenticated;
         return isAuthenticated;
     }
@@ -153,7 +146,6 @@ public class User {
         }
         this.document = newDocument;
         this.documentType = newDocumentType;
-
     }
 
     public void setProfileImage(String imageKey) {

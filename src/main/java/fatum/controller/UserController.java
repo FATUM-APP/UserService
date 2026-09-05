@@ -51,6 +51,7 @@ public class UserController {
                 request.email(),
                 request.names(),
                 request.surnames(),
+                request.phoneNumber(),
                 request.birthDate());
         return ResponseEntity.status(201).body(userService.createUser(newUser));
     }
@@ -79,13 +80,6 @@ public class UserController {
         User updated = userService.updateProfileImage(jwt.getSubject(), image);
         enrichProfileImage(updated);
         return ResponseEntity.ok(updated);
-    }
-
-    @PostMapping("/me/authenticate-document")
-    public ResponseEntity<UserStatusResponse> authenticateDocument(@AuthenticationPrincipal Jwt jwt)
-            throws FatumUserException {
-        boolean authenticated = userService.authenticateUserDocument(jwt.getSubject());
-        return ResponseEntity.ok(new UserStatusResponse(jwt.getSubject(), authenticated));
     }
 
     @GetMapping("/me/authenticated")

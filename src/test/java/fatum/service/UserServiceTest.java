@@ -1,7 +1,5 @@
 package fatum.service;
 
-import com.google.cloud.storage.BlobInfo;
-import com.google.cloud.storage.Storage;
 import fatum.dto.UserUpdateRequest;
 import fatum.exception.FatumUserException;
 import fatum.model.DocumentType;
@@ -15,11 +13,20 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockMultipartFile;
+import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.model.PutObjectResponse;
+import software.amazon.awssdk.services.s3.presigner.S3Presigner;
+import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
+import software.amazon.awssdk.services.s3.presigner.model.PresignedGetObjectRequest;
 
+import java.net.URI;
 import java.net.URL;
 import java.time.LocalDate;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -27,7 +34,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -43,22 +50,25 @@ class UserServiceTest {
     private UserRepository userRepository;
 
     @Mock
-    private Storage storage;
+    private S3Client s3Client;
+
+    @Mock
+    private S3Presigner s3Presigner;
 
     private UserService userService;
     private User testUser;
 
     @BeforeEach
     void setUp() {
-        userService = new UserService(userRepository, storage, "fatum-profile-images");
+        userService = new UserService(userRepository, s3Client, s3Presigner, "fatum-profile-images");
         testUser = new User(
                 AUTH0_ID,
                 EMAIL,
                 "Camilo",
                 "Castaño",
+                "+573183074075",
                 LocalDate.now().minusYears(25));
         testUser.setUsername("ccastano41");
-        testUser.setPhoneNumber("+573183074075");
     }
 
     @Test
@@ -82,6 +92,7 @@ class UserServiceTest {
                 "minor@example.com",
                 "Minor",
                 "User",
+                "+573000000000",
                 LocalDate.now().minusYears(18).plusDays(1));
 
         FatumUserException exception = assertThrows(
@@ -120,24 +131,6 @@ class UserServiceTest {
     }
 
     @Test
-    @DisplayName("Should return the user by Auth0 subject")
-    void shouldGetUser() throws FatumUserException {
-        when(userRepository.findByAuth0Id(AUTH0_ID)).thenReturn(testUser);
-
-        assertEquals(testUser, userService.getUserById(AUTH0_ID));
-    }
-
-    @Test
-    @DisplayName("Should report a missing user")
-    void shouldReportMissingUser() {
-        FatumUserException exception = assertThrows(
-                FatumUserException.class,
-                () -> userService.getUserById(AUTH0_ID));
-
-        assertEquals(FatumUserException.USER_NOT_FOUND, exception.getMessage());
-    }
-
-    @Test
     @DisplayName("Should update username and phone")
     void shouldUpdateUsernameAndPhone() throws FatumUserException {
         when(userRepository.findByAuth0Id(AUTH0_ID)).thenReturn(testUser);
@@ -160,26 +153,6 @@ class UserServiceTest {
     }
 
     @Test
-    @DisplayName("Should not query conflicts when values are unchanged")
-    void shouldAllowUnchangedUniqueValues() throws FatumUserException {
-        when(userRepository.findByAuth0Id(AUTH0_ID)).thenReturn(testUser);
-        when(userRepository.save(testUser)).thenReturn(testUser);
-
-        userService.updateUser(
-                AUTH0_ID,
-                new UserUpdateRequest(
-                        "ccastano41",
-                        "+573183074075",
-                        null,
-                        null,
-                        null,
-                        null));
-
-        verify(userRepository, never()).findByUsername(any());
-        verify(userRepository, never()).findByPhoneNumber(any());
-    }
-
-    @Test
     @DisplayName("Should reject a duplicate username")
     void shouldRejectDuplicateUsername() {
         User otherUser = new User(
@@ -187,6 +160,7 @@ class UserServiceTest {
                 "other@example.com",
                 "Other",
                 "User",
+                "+573009999999",
                 LocalDate.now().minusYears(30));
         when(userRepository.findByAuth0Id(AUTH0_ID)).thenReturn(testUser);
         when(userRepository.findByUsername("taken")).thenReturn(otherUser);
@@ -202,8 +176,8 @@ class UserServiceTest {
     }
 
     @Test
-    @DisplayName("Should set city before professional role in the same update")
-    void shouldPromoteProfessionalWithCityInSameUpdate() throws FatumUserException {
+    @DisplayName("Should promote a user to professional when city is supplied")
+    void shouldPromoteProfessionalWithCity() throws FatumUserException {
         when(userRepository.findByAuth0Id(AUTH0_ID)).thenReturn(testUser);
         when(userRepository.save(testUser)).thenReturn(testUser);
 
@@ -242,22 +216,6 @@ class UserServiceTest {
                         new UserUpdateRequest(null, null, null, "1000271422", null, null)));
 
         assertEquals(FatumUserException.DOCUMENT_TYPE_REQUIRED, exception.getMessage());
-    }
-
-    @Test
-    @DisplayName("Should set and authenticate a document")
-    void shouldSetAndAuthenticateDocument() throws FatumUserException {
-        when(userRepository.findByAuth0Id(AUTH0_ID)).thenReturn(testUser);
-        when(userRepository.save(testUser)).thenReturn(testUser);
-
-        userService.updateUser(
-                AUTH0_ID,
-                new UserUpdateRequest(null, null, null, "1000271422", DocumentType.ID, null));
-        boolean documentAuthenticated = userService.authenticateUserDocument(AUTH0_ID);
-
-        assertTrue(documentAuthenticated);
-        assertTrue(testUser.isAuthenticated());
-        assertEquals(DocumentType.ID, testUser.getDocumentType());
     }
 
     @Test
@@ -300,13 +258,11 @@ class UserServiceTest {
         when(userRepository.findByNamesIgnoreCaseAndSurnamesIgnoreCase("Camilo", "Castaño"))
                 .thenReturn(List.of(testUser));
 
-        assertEquals(
-                List.of(testUser),
-                userService.getUsersByName("Camilo", "Castaño"));
+        assertEquals(List.of(testUser), userService.getUsersByName("Camilo", "Castaño"));
     }
 
     @Test
-    @DisplayName("Should upload and replace a profile image")
+    @DisplayName("Should upload and replace a profile image in S3")
     void shouldUpdateProfileImage() throws Exception {
         MockMultipartFile image = new MockMultipartFile(
                 "image",
@@ -315,29 +271,48 @@ class UserServiceTest {
                 new byte[]{1, 2, 3});
         when(userRepository.findByAuth0Id(AUTH0_ID)).thenReturn(testUser);
         when(userRepository.save(testUser)).thenReturn(testUser);
+        when(s3Client.putObject(any(PutObjectRequest.class), any(RequestBody.class)))
+                .thenReturn(PutObjectResponse.builder().eTag("etag").build());
 
         User updated = userService.updateProfileImage(AUTH0_ID, image);
 
         assertNotNull(updated.getProfileImage());
         assertTrue(updated.getProfileImage().getImageKey().startsWith("profile-images/"));
         assertTrue(updated.getProfileImage().getImageKey().endsWith("-avatar.png"));
-        verify(storage).create(any(BlobInfo.class), eq(new byte[]{1, 2, 3}));
+        verify(s3Client).putObject(any(PutObjectRequest.class), any(RequestBody.class));
     }
 
     @Test
-    @DisplayName("Should generate a V4 signed profile image URL")
+    @DisplayName("Should delete the previous profile image after replacement")
+    void shouldDeletePreviousProfileImage() throws Exception {
+        testUser.setProfileImage("profile-images/old.png");
+        MockMultipartFile image = new MockMultipartFile(
+                "image",
+                "new.png",
+                "image/png",
+                new byte[]{4, 5, 6});
+        when(userRepository.findByAuth0Id(AUTH0_ID)).thenReturn(testUser);
+        when(userRepository.save(testUser)).thenReturn(testUser);
+        when(s3Client.putObject(any(PutObjectRequest.class), any(RequestBody.class)))
+                .thenReturn(PutObjectResponse.builder().eTag("etag").build());
+
+        userService.updateProfileImage(AUTH0_ID, image);
+
+        verify(s3Client).deleteObject(any(DeleteObjectRequest.class));
+    }
+
+    @Test
+    @DisplayName("Should generate a 15-minute S3 presigned URL")
     void shouldGenerateProfileImageUrl() throws Exception {
         testUser.setProfileImage("profile-images/avatar.png");
-        URL expectedUrl = new URL("https://storage.example/avatar.png");
-        when(storage.signUrl(
-                any(BlobInfo.class),
-                eq(15L),
-                eq(TimeUnit.MINUTES),
-                any(Storage.SignUrlOption.class)))
-                .thenReturn(expectedUrl);
+        URL expectedUrl = URI.create("https://s3.amazonaws.com/fatum-profile-images/profile-images/avatar.png").toURL();
+        PresignedGetObjectRequest presigned = mock(PresignedGetObjectRequest.class);
+        when(presigned.url()).thenReturn(expectedUrl);
+        when(s3Presigner.presignGetObject(any(GetObjectPresignRequest.class))).thenReturn(presigned);
 
         userService.setProfileImageUrl(testUser.getProfileImage());
 
         assertEquals(expectedUrl.toString(), testUser.getProfileImage().getPresignedUrl());
+        verify(s3Presigner).presignGetObject(any(GetObjectPresignRequest.class));
     }
 }

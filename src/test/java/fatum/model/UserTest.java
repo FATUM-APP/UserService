@@ -18,27 +18,25 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class UserTest {
 
     @Test
-    @DisplayName("Should authenticate when every required field is present")
-    void shouldAuthenticateCompleteUser() throws FatumUserException {
+    @DisplayName("Should authenticate when a valid document exists")
+    void shouldAuthenticateWithDocument() throws FatumUserException {
         User user = buildUser();
-        user.setUsername("ccastano46");
-        user.setPhoneNumber("+573001112233");
         user.setDocument("1000271422", DocumentType.ID);
-        user.authenticateDocument();
 
-        assertTrue(user.authenticate());
+        assertTrue(user.authenticate(true));
         assertTrue(user.isAuthenticated());
     }
 
     @Test
-    @DisplayName("Should remain unauthenticated until document verification")
-    void shouldRequireDocumentVerification() throws FatumUserException {
+    @DisplayName("Should reject authentication without a document")
+    void shouldRejectAuthenticationWithoutDocument() {
         User user = buildUser();
-        user.setUsername("ccastano46");
-        user.setPhoneNumber("+573001112233");
-        user.setDocument("1000271422", DocumentType.ID);
 
-        assertFalse(user.authenticate());
+        FatumUserException exception = assertThrows(
+                FatumUserException.class,
+                () -> user.authenticate(true));
+
+        assertEquals(FatumUserException.DOCUMENT_NOT_AUTHENTICATED, exception.getMessage());
     }
 
     @Test
@@ -54,8 +52,8 @@ class UserTest {
     }
 
     @Test
-    @DisplayName("Should serialize historical boolean property names without duplicates")
-    void shouldSerializeExpectedBooleanProperties() throws Exception {
+    @DisplayName("Should serialize only the current authentication properties")
+    void shouldSerializeCurrentBooleanProperties() throws Exception {
         User user = buildUser();
         ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
 
@@ -63,7 +61,6 @@ class UserTest {
 
         assertTrue(json.has("isAuthenticated"));
         assertTrue(json.has("isActive"));
-        assertTrue(json.has("documentIsAuthenticated"));
         assertFalse(json.has("authenticated"));
         assertFalse(json.has("active"));
     }
@@ -87,6 +84,7 @@ class UserTest {
                 "domain@example.com",
                 "Camilo",
                 "Castaño",
+                "+573001112233",
                 LocalDate.of(1995, 5, 10));
     }
 }

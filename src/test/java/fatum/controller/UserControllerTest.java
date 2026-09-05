@@ -20,6 +20,7 @@ import java.time.LocalDate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -49,6 +50,7 @@ class UserControllerTest {
                 "controller@example.com",
                 "Camilo",
                 "Castaño",
+                "+573001112233",
                 LocalDate.of(1995, 5, 10));
     }
 
@@ -59,6 +61,7 @@ class UserControllerTest {
                 "controller@example.com",
                 "Camilo",
                 "Castaño",
+                "+573001112233",
                 LocalDate.of(1995, 5, 10));
         when(userService.createUser(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -68,7 +71,7 @@ class UserControllerTest {
         verify(userService).createUser(captor.capture());
         assertEquals(HttpStatus.CREATED, response.getStatusCode());
         assertEquals(AUTH0_ID, captor.getValue().getAuth0Id());
-        assertEquals("controller@example.com", captor.getValue().getEmail());
+        assertEquals("+573001112233", captor.getValue().getPhoneNumber());
     }
 
     @Test
@@ -121,6 +124,6 @@ class UserControllerTest {
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertNotNull(response.getBody());
         assertEquals("controller@example.com", response.getBody().email());
-        assertEquals(true, response.getBody().isActive());
+        assertTrue(response.getBody().isActive());
     }
 }

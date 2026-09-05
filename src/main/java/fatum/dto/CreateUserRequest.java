@@ -25,6 +25,10 @@ public record CreateUserRequest(
         @Size(max = 70, message = "Surnames must not exceed 70 characters")
         String surnames,
 
+        @NotBlank(message = "Phone number is required")
+        @Size(max = 20, message = "Phone number must not exceed 20 characters")
+        String phoneNumber,
+
         @NotNull(message = "Birth date is required")
         @Past(message = "Birth date must be in the past")
         LocalDate birthDate
