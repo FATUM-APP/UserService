@@ -46,7 +46,7 @@ public class UserService {
         if (userRepository.findByAuth0Id(newUser.getAuth0Id()) != null) {
             throw new FatumUserException(FatumUserException.USER_ALREADY_EXISTS);
         }
-        if (userRepository.findByEmail(newUser.getEmail()) != null) {
+        if (userRepository.findByEmail(newUser.getEmail()) != null) { #
             throw new FatumUserException(FatumUserException.EMAIL_EXISTS);
         }
         return userRepository.save(newUser);
