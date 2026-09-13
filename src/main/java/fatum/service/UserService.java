@@ -83,7 +83,7 @@ public class UserService {
         if (user == null) {
             throw new FatumUserException(FatumUserException.USER_NOT_FOUND);
         }
-        return user;
+        return user; //hola
     }
 
     public User getUserByEmail(String email) throws FatumUserException {
