@@ -174,14 +174,11 @@ public class UserService {
     }
 
 
-    public boolean isUserActiveByEmail(String email, String username) throws FatumUserException {
+    public boolean isUserActive(String email, String username) throws FatumUserException {
         if (email == null || email.isBlank() && (username == null || username.isBlank())) {
             throw new FatumUserException(FatumUserException.NULL_VALUE);
         }
         User user = email == null || email.isBlank() ? getUserByUsername(username) : getUserByEmail(email);
-        if (user == null) {
-            throw new FatumUserException(FatumUserException.USER_NOT_FOUND);
-        }
         return user.isActive();
     }
 
@@ -249,8 +246,7 @@ public class UserService {
         if (user == null
                 || user.getAuth0Id() == null || user.getAuth0Id().isBlank()
                 || user.getEmail() == null || user.getEmail().isBlank()
-                || user.getNames() == null || user.getNames().isBlank()
-                || user.getSurnames() == null || user.getSurnames().isBlank()
+                || user.getName() == null || user.getName().isBlank()
                 || user.getPhoneNumber() == null || user.getPhoneNumber().isBlank()
                 || user.getBirthDate() == null) {
             throw new FatumUserException(FatumUserException.NULL_VALUE);

@@ -30,11 +30,8 @@ public class User {
     @Column(name = "EMAIL", nullable = false, unique = true, length = 100)
     private String email;
 
-    @Column(name = "NAMES", nullable = false, length = 70)
-    private String names;
-
-    @Column(name = "SURNAMES", nullable = false, length = 70)
-    private String surnames;
+    @Column(name = "COMPLETE_NAME", nullable = false, length = 142)
+    private String name;
 
     @Column(name = "BIRTH_DATE", nullable = false)
     private LocalDate birthDate;
@@ -66,26 +63,28 @@ public class User {
     @Column(name = "CITY", length = 50)
     private String city;
 
+    @Column(name = "COUNTRY", nullable = false, length = 50)
+    private Country country;
+
     @OneToOne(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.EAGER, orphanRemoval = true)
     private ProfileImage profileImage;
 
     public User(
             String auth0Id,
             String email,
-            String names,
-            String surnames,
+            String name,
             String phoneNumber,
             LocalDate birthDate,
             String username) {
         this.auth0Id = auth0Id;
         this.email = normalize(email, "1");
-        this.names = normalize(names, "names");
-        this.surnames = normalize(surnames, "names");
+        this.name = normalize(name, "names");
         this.phoneNumber = normalize(phoneNumber, "3");
         this.birthDate = birthDate;
         this.username = normalize(username, "1");
         this.isAuthenticated = false;
         this.isActive = true;
+        this.country = Country.COLOMBIA;
     }
 
     public void setUsername(String newUsername) throws FatumUserException {
