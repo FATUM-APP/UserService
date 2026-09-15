@@ -17,11 +17,11 @@ import lombok.NoArgsConstructor;
 import java.time.Instant;
 
 @Entity
-@Table(name = "PROFILE_IMAGES")
+@Table(name = "DOCUMENT_FILES")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @EqualsAndHashCode(onlyExplicitlyIncluded = true)
-public class ProfileImage {
+public class DocumentFile {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -29,8 +29,8 @@ public class ProfileImage {
     @Column(name = "ID", length = 36)
     private String id;
 
-    @Column(name = "IMAGE_KEY", nullable = false, length = 255)
-    private String imageKey;
+    @Column(name = "DOCUMENT_KEY", nullable = false, length = 255)
+    private String documentKey;
 
     @Column(name = "ORIGINAL_FILENAME", nullable = false, length = 255)
     private String originalFilename;
@@ -51,13 +51,13 @@ public class ProfileImage {
     @JoinColumn(name = "USER_AUTH0_ID", nullable = false, unique = true)
     private User user;
 
-    public ProfileImage(
-            String imageKey,
+    public DocumentFile(
+            String documentKey,
             String originalFilename,
             String contentType,
             long fileSize,
             User user) {
-        this.imageKey = requireText(imageKey, "imageKey");
+        this.documentKey = requireText(documentKey, "documentKey");
         this.originalFilename = requireText(originalFilename, "originalFilename");
         this.contentType = requireText(contentType, "contentType");
         this.fileSize = requireNonNegative(fileSize);
@@ -67,11 +67,11 @@ public class ProfileImage {
     }
 
     public void replace(
-            String imageKey,
+            String documentKey,
             String originalFilename,
             String contentType,
             long fileSize) {
-        this.imageKey = requireText(imageKey, "imageKey");
+        this.documentKey = requireText(documentKey, "documentKey");
         this.originalFilename = requireText(originalFilename, "originalFilename");
         this.contentType = requireText(contentType, "contentType");
         this.fileSize = requireNonNegative(fileSize);

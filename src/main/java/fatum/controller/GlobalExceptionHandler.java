@@ -81,7 +81,7 @@ public class GlobalExceptionHandler {
             HttpServletRequest request) {
         return buildError(
                 HttpStatus.INTERNAL_SERVER_ERROR,
-                "Error processing the profile image",
+                "Error processing the stored file",
                 request.getRequestURI(),
                 Map.of());
     }

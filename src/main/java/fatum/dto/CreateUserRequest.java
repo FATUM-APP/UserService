@@ -1,6 +1,6 @@
 package fatum.dto;
 
-import fatum.model.DocumentType;
+import fatum.model.constant.DocumentType;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -15,13 +15,9 @@ public record CreateUserRequest(
         @Size(max = 100, message = "Email must not exceed 100 characters")
         String email,
 
-        @NotBlank(message = "Names are required")
-        @Size(max = 70, message = "Names must not exceed 70 characters")
-        String names,
-
-        @NotBlank(message = "Surnames are required")
-        @Size(max = 70, message = "Surnames must not exceed 70 characters")
-        String surnames,
+        @NotBlank(message = "Name is required")
+        @Size(max = 142, message = "Name must not exceed 142 characters")
+        String name,
 
         @NotBlank(message = "Phone number is required")
         @Size(max = 20, message = "Phone number must not exceed 20 characters")

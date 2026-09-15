@@ -1,18 +1,22 @@
 package fatum.model;
 
 import fatum.exception.FatumUserException;
-import jakarta.persistence.CascadeType;
+import fatum.model.constant.Country;
+import fatum.model.constant.DocumentType;
+import fatum.model.constant.UserRole;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
-import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
-import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
-import lombok.*;
+import lombok.AccessLevel;
+import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
+import java.util.Locale;
 import java.util.Objects;
 
 @Entity
@@ -49,25 +53,22 @@ public class User {
     @Column(name = "IS_AUTHENTICATED", nullable = false)
     private boolean isAuthenticated;
 
-    @Setter
     @Column(name = "IS_ACTIVE", nullable = false)
     private boolean isActive;
 
-    @Column(name = "DOCUMENT", unique = true, length = 10)
+    @Column(name = "DOCUMENT", nullable = false, unique = true, length = 30)
     private String document;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "DOCUMENT_TYPE", length = 20)
+    @Column(name = "DOCUMENT_TYPE", nullable = false, length = 20)
     private DocumentType documentType;
 
     @Column(name = "CITY", length = 50)
     private String city;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "COUNTRY", nullable = false, length = 50)
-    private Country country;
-
-    @OneToOne(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.EAGER, orphanRemoval = true)
-    private ProfileImage profileImage;
+    private Country country = Country.COLOMBIA;
 
     public User(
             String auth0Id,
@@ -75,28 +76,34 @@ public class User {
             String name,
             String phoneNumber,
             LocalDate birthDate,
-            String username) {
-        this.auth0Id = auth0Id;
-        this.email = normalize(email, "1");
-        this.name = normalize(name, "names");
-        this.phoneNumber = normalize(phoneNumber, "3");
-        this.birthDate = birthDate;
-        this.username = normalize(username, "1");
+            String username,
+            String document,
+            DocumentType documentType) {
+        this.auth0Id = requireText(auth0Id, "auth0Id");
+        this.email = requireText(email, "email").toLowerCase(Locale.ROOT);
+        this.name = requireText(name, "name").toUpperCase(Locale.ROOT);
+        this.phoneNumber = requireText(phoneNumber, "phoneNumber");
+        this.birthDate = Objects.requireNonNull(birthDate, "birthDate is required");
+        this.username = requireText(username, "username");
+        this.document = requireText(document, "document");
+        this.documentType = Objects.requireNonNull(documentType, "documentType is required");
         this.isAuthenticated = false;
         this.isActive = true;
         this.country = Country.COLOMBIA;
     }
 
-    public void setUsername(String newUsername) throws FatumUserException {
+    public void setUsername(String newUsername) {
         this.username = requireText(newUsername, "username");
     }
 
-    public void setPhoneNumber(String newPhoneNumber) throws FatumUserException {
+    public void setPhoneNumber(String newPhoneNumber) {
         this.phoneNumber = requireText(newPhoneNumber, "phoneNumber");
     }
 
     public void setRole(UserRole newRole) throws FatumUserException {
-        if (newRole == null) throw new FatumUserException(FatumUserException.NULL_VALUE);
+        if (newRole == null) {
+            throw new FatumUserException(FatumUserException.NULL_VALUE);
+        }
         if (newRole == UserRole.PROFESSIONAL && (city == null || city.isBlank())) {
             throw new FatumUserException(FatumUserException.PROFESSIONAL_CITY);
         }
@@ -107,51 +114,28 @@ public class User {
         if (role == UserRole.PROFESSIONAL && (newCity == null || newCity.isBlank())) {
             throw new FatumUserException(FatumUserException.PROFESSIONAL_CITY);
         }
-        this.city = requireText(newCity, "city");
+        this.city = newCity == null || newCity.isBlank() ? null : newCity.trim();
     }
 
     public boolean authenticate(boolean authenticated) throws FatumUserException {
-        if (!this.isActive) throw new FatumUserException(FatumUserException.INACTIVE);
-        if (authenticated && (document == null || document.isBlank() || documentType == null)) {
+        if (!isActive) {
+            throw new FatumUserException(FatumUserException.INACTIVE);
+        }
+        if (authenticated && (document.isBlank() || documentType == null)) {
             throw new FatumUserException(FatumUserException.DOCUMENT_NOT_AUTHENTICATED);
         }
         this.isAuthenticated = authenticated;
         return authenticated;
     }
 
-    public void setDocument(String newDocument, DocumentType newDocumentType) throws FatumUserException {
-        if (document != null) {
-            throw new FatumUserException(FatumUserException.DOCUMENT_NOT_MUTABLE);
-        }
-        if ((newDocument == null || newDocument.isBlank() || newDocumentType == null)) {
-            throw new FatumUserException(FatumUserException.DOCUMENT_TYPE_REQUIRED);
-        }
-        this.document = newDocument;
-        this.documentType = newDocumentType;
+    public void deactivate() {
+        this.isActive = false;
     }
 
-
-    public void setProfileImage(String imageKey) throws FatumUserException {
-        String normalizedKey = requireText(imageKey, "imageKey");
-        if (profileImage == null) {
-            profileImage = new ProfileImage(normalizedKey, this);
-        } else {
-            profileImage.replaceImageKey(normalizedKey);
-        }
-    }
-
-    private String requireText(String value, String fieldName) throws FatumUserException {
+    private static String requireText(String value, String fieldName) {
         if (value == null || value.isBlank()) {
-            throw new FatumUserException(fieldName + ": " + FatumUserException.NULL_VALUE);
+            throw new IllegalArgumentException(fieldName + " is required");
         }
-        return normalize(value, "1");
+        return value.trim();
     }
-
-    private String normalize(String value, String option) {
-        if (option.equals("names")) return value.trim().toUpperCase();
-            else return value.trim().toLowerCase();
-
-    }
-
-
 }

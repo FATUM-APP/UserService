@@ -1,15 +1,15 @@
 package fatum.dto;
 
-import fatum.model.DocumentType;
-import fatum.model.UserRole;
+import fatum.model.constant.Country;
+import fatum.model.constant.DocumentType;
+import fatum.model.constant.UserRole;
 
 import java.time.LocalDate;
 
 public record UserResponse(
         String auth0Id,
         String email,
-        String names,
-        String surnames,
+        String name,
         LocalDate birthDate,
         String username,
         String phoneNumber,
@@ -19,6 +19,8 @@ public record UserResponse(
         String document,
         DocumentType documentType,
         String city,
-        ProfileImageResponse profileImage
+        Country country,
+        StoredFileResponse profileImage,
+        StoredFileResponse documentFile
 ) {
 }

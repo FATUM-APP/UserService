@@ -8,12 +8,16 @@ spring:
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
-      ddl-auto: ${JPA_DDL_AUTO:update}
+      ddl-auto: ${JPA_DDL_AUTO:validate}
     open-in-view: false
     show-sql: ${JPA_SHOW_SQL:false}
     properties:
       hibernate:
         format_sql: true
+  flyway:
+    enabled: ${FLYWAY_ENABLED:true}
+    baseline-on-migrate: true
+    baseline-version: 0
   servlet:
     multipart:
       max-file-size: ${MAX_FILE_SIZE:10MB}
@@ -34,7 +38,8 @@ auth0:
 aws:
   region: ${AWS_REGION:us-east-1}
   s3:
-    bucket: ${AWS_S3_BUCKET}
+    profile-images-bucket: ${AWS_S3_PROFILE_IMAGES_BUCKET}
+    documents-bucket: ${AWS_S3_DOCUMENTS_BUCKET}
 
 app:
   cors:

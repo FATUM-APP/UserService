@@ -1,6 +1,5 @@
 package fatum.dto;
 
-import fatum.model.ProfileImage;
 import fatum.model.User;
 import org.springframework.stereotype.Component;
 
@@ -14,8 +13,7 @@ public class UserMapper {
         return new User(
                 auth0Id,
                 request.email(),
-                request.names(),
-                request.surnames(),
+                request.name(),
                 request.phoneNumber(),
                 request.birthDate(),
                 request.username(),
@@ -23,14 +21,15 @@ public class UserMapper {
                 request.documentType());
     }
 
-    public UserResponse toResponse(User user, String profileImageUrl) {
+    public UserResponse toResponse(
+            User user,
+            StoredFileResponse profileImage,
+            StoredFileResponse documentFile) {
         Objects.requireNonNull(user, "user is required");
-        ProfileImageResponse profileImage = toProfileImageResponse(user.getProfileImage(), profileImageUrl);
         return new UserResponse(
                 user.getAuth0Id(),
                 user.getEmail(),
-                user.getNames(),
-                user.getSurnames(),
+                user.getName(),
                 user.getBirthDate(),
                 user.getUsername(),
                 user.getPhoneNumber(),
@@ -40,13 +39,8 @@ public class UserMapper {
                 user.getDocument(),
                 user.getDocumentType(),
                 user.getCity(),
-                profileImage);
-    }
-
-    private ProfileImageResponse toProfileImageResponse(ProfileImage image, String profileImageUrl) {
-        if (image == null) {
-            return null;
-        }
-        return new ProfileImageResponse(image.getId(), profileImageUrl);
+                user.getCountry(),
+                profileImage,
+                documentFile);
     }
 }
