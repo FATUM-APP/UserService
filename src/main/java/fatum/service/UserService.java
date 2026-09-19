@@ -21,10 +21,13 @@ public class UserService {
     }
 
     @Transactional
-    public User createUser(User newUser) throws FatumUserException {
-        validateNewUser(newUser);
-        validateUniqueValues(newUser);
+    public User createUser(User newUser)  {
         return userRepository.save(newUser);
+    }
+
+    public boolean validateUser(User user)  {
+
+        return validateUniqueValues(user) && validateNewUser(user);
     }
 
 
@@ -78,9 +81,9 @@ public class UserService {
     }
 
 
-    public List<User> getUsersByName(String name, String lastname) throws FatumUserException {
+    public List<User> getUsersByName(String name) throws FatumUserException {
         validateText(name);
-        return userRepository.findByNamesIgnoreCaseAndSurnamesIgnoreCase(name.trim(), lastname.trim());
+        return userRepository.findByNamesIgnoreCase(name.trim());
     }
 
     @Transactional

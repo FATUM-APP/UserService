@@ -99,8 +99,8 @@ public class UserController {
 
     @GetMapping("/search")
     public ResponseEntity<List<UserResponse>> searchUsers(
-            @RequestParam @NotBlank String name, @RequestParam @NotBlank String surnname) throws FatumUserException {
-        List<UserResponse> users = userService.getUsersByName(name,surnname).stream()
+            @RequestParam @NotBlank String name) throws FatumUserException {
+        List<UserResponse> users = userService.getUsersByName(name).stream()
                 .map(this::toResponse)
                 .toList();
         return ResponseEntity.ok(users);

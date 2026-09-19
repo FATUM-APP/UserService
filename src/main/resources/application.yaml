@@ -41,6 +41,7 @@ aws:
     profile-images-bucket: ${AWS_S3_PROFILE_IMAGES_BUCKET}
     documents-bucket: ${AWS_S3_DOCUMENTS_BUCKET}
 
+
 app:
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}

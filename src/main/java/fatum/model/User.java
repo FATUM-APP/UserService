@@ -3,6 +3,7 @@ package fatum.model;
 import fatum.exception.FatumUserException;
 import fatum.model.constant.Country;
 import fatum.model.constant.DocumentType;
+import fatum.model.constant.Gender;
 import fatum.model.constant.UserRole;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -60,6 +61,10 @@ public class User {
     private String document;
 
     @Enumerated(EnumType.STRING)
+    @Column(name = "GENDER", nullable = false, length = 5)
+    private Gender  gender;
+
+    @Enumerated(EnumType.STRING)
     @Column(name = "DOCUMENT_TYPE", nullable = false, length = 20)
     private DocumentType documentType;
 
@@ -78,7 +83,8 @@ public class User {
             LocalDate birthDate,
             String username,
             String document,
-            DocumentType documentType) {
+            DocumentType documentType
+            ) {
         this.auth0Id = requireText(auth0Id, "auth0Id");
         this.email = requireText(email, "email").toLowerCase(Locale.ROOT);
         this.name = requireText(name, "name").toUpperCase(Locale.ROOT);

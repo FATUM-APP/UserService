@@ -19,5 +19,5 @@ public interface UserRepository extends JpaRepository<User, String> {
 
     User findByDocument(String document);
 
-    List<User> findByNamesIgnoreCaseAndSurnamesIgnoreCase(String names, String surnames);
+    List<User> findByNamesIgnoreCase(String names);
 }
