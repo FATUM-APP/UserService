@@ -41,7 +41,7 @@ public class ProfileImageService {
             throws FatumUserException, IOException {
         User user = getActiveUser(auth0Id);
         ValidatedFile validatedFile = validate(file);
-        ProfileImage current = profileImageRepository.findByUserAuth0Id(auth0Id).orElse(null);
+        ProfileImage current = profileImageRepository.findByUserAwsId(auth0Id).orElse(null);
         String previousKey = current == null ? null : current.getImageKey();
 
         StoredObject uploaded = storage.upload(
@@ -81,27 +81,18 @@ public class ProfileImageService {
 
     public StoredFileResponse get(String auth0Id) throws FatumUserException {
         getActiveUser(auth0Id);
-        ProfileImage image = profileImageRepository.findByUserAuth0Id(auth0Id)
+        ProfileImage image = profileImageRepository.findByUserAwsId(auth0Id)
                 .orElseThrow(() -> new FatumUserException(FatumUserException.FILE_NOT_FOUND));
         return toResponse(image);
     }
 
 
     public StoredFileResponse find(String auth0Id) {
-        return profileImageRepository.findByUserAuth0Id(auth0Id)
+        return profileImageRepository.findByUserAwsId(auth0Id)
                 .map(this::toResponse)
                 .orElse(null);
     }
-
-    @Transactional
-    public void delete(String auth0Id) throws FatumUserException {
-        getActiveUser(auth0Id);
-        ProfileImage image = profileImageRepository.findByUserAuth0Id(auth0Id)
-                .orElseThrow(() -> new FatumUserException(FatumUserException.FILE_NOT_FOUND));
-        storage.delete(bucketName, image.getImageKey());
-        profileImageRepository.delete(image);
-    }
-
+    
     private StoredFileResponse toResponse(ProfileImage image) {
         return new StoredFileResponse(
                 image.getId(),
@@ -115,12 +106,9 @@ public class ProfileImageService {
 
     private User getActiveUser(String auth0Id) throws FatumUserException {
         validateAuth0Id(auth0Id);
-        User user = userRepository.findByAuth0Id(auth0Id);
+        User user = userRepository.findByAwsId(auth0Id);
         if (user == null) {
             throw new FatumUserException(FatumUserException.USER_NOT_FOUND);
-        }
-        if (!user.isActive()) {
-            throw new FatumUserException(FatumUserException.INACTIVE);
         }
         return user;
     }

@@ -40,11 +40,4 @@ public class ProfileImageController {
             @AuthenticationPrincipal Jwt jwt) throws FatumUserException {
         return ResponseEntity.ok(profileImageService.get(jwt.getSubject()));
     }
-
-    @DeleteMapping
-    public ResponseEntity<Void> delete(
-            @AuthenticationPrincipal Jwt jwt) throws FatumUserException {
-        profileImageService.delete(jwt.getSubject());
-        return ResponseEntity.noContent().build();
-    }
 }

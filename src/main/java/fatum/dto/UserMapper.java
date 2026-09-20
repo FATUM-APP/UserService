@@ -1,5 +1,6 @@
 package fatum.dto;
 
+import fatum.exception.FatumUserException;
 import fatum.model.User;
 import org.springframework.stereotype.Component;
 
@@ -8,26 +9,26 @@ import java.util.Objects;
 @Component
 public class UserMapper {
 
-    public User toEntity(String auth0Id, CreateUserRequest request) {
-        Objects.requireNonNull(request, "request is required");
+    private UserMapper() {}
+
+    public static User toEntity(CreateUserRequest request) throws FatumUserException{
+        if (request == null) throw new FatumUserException(FatumUserException.NULL_VALUE);
         return new User(
-                auth0Id,
+                request.awsId(),
                 request.email(),
                 request.name(),
                 request.phoneNumber(),
                 request.birthDate(),
                 request.username(),
                 request.document(),
-                request.documentType());
+                request.documentType(),
+                request.gender()
+        );
     }
 
-    public UserResponse toResponse(
-            User user,
-            StoredFileResponse profileImage,
-            StoredFileResponse documentFile) {
-        Objects.requireNonNull(user, "user is required");
+    public static UserResponse toResponse(User user) throws FatumUserException {
+        if (user == null) throw new FatumUserException(FatumUserException.NULL_VALUE);
         return new UserResponse(
-                user.getAuth0Id(),
                 user.getEmail(),
                 user.getName(),
                 user.getBirthDate(),
@@ -37,10 +38,9 @@ public class UserMapper {
                 user.isAuthenticated(),
                 user.isActive(),
                 user.getDocument(),
+                user.getGender(),
                 user.getDocumentType(),
                 user.getCity(),
-                user.getCountry(),
-                profileImage,
-                documentFile);
+                user.getCountry());
     }
 }

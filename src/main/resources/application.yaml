@@ -26,25 +26,25 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: https://${AUTH0_DOMAIN}/
+          issuer-uri: https://cognito-idp.${aws.region}.amazonaws.com/${aws.cognito.user-pool-id}
 
 server:
   port: ${PORT:8080}
-
-auth0:
-  domain: ${AUTH0_DOMAIN}
-  audience: ${AUTH0_AUDIENCE}
 
 aws:
   region: ${AWS_REGION:us-east-1}
   s3:
     profile-images-bucket: ${AWS_S3_PROFILE_IMAGES_BUCKET}
     documents-bucket: ${AWS_S3_DOCUMENTS_BUCKET}
+  cognito:
+    user-pool-id: ${USER_POOL_ID}
 
 
 app:
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
+  lambda:
+    secret: ${LAMBDA_SECRET}
 
 springdoc:
   api-docs:

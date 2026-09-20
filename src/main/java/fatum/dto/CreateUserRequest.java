@@ -1,6 +1,7 @@
 package fatum.dto;
 
 import fatum.model.constant.DocumentType;
+import fatum.model.constant.Gender;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -10,6 +11,10 @@ import jakarta.validation.constraints.Size;
 import java.time.LocalDate;
 
 public record CreateUserRequest(
+        @NotBlank(message = "AWS id is required")
+        @Size(max = 255)
+        String awsId,
+
         @NotBlank(message = "Email is required")
         @Email(message = "Email must be valid")
         @Size(max = 100, message = "Email must not exceed 100 characters")
@@ -36,6 +41,9 @@ public record CreateUserRequest(
         String document,
 
         @NotNull(message = "Document type is required")
-        DocumentType documentType
+        DocumentType documentType,
+
+        @NotNull(message ="Gender is required")
+        Gender gender
 ) {
 }

@@ -25,7 +25,10 @@ public class GlobalExceptionHandler {
             FatumUserException exception,
             HttpServletRequest request) {
         HttpStatus status = switch (exception.getMessage()) {
-            case FatumUserException.USER_NOT_FOUND -> HttpStatus.NOT_FOUND;
+            case FatumUserException.USER_NOT_FOUND,
+                 FatumUserException.FILE_NOT_FOUND -> HttpStatus.NOT_FOUND;
+            case FatumUserException.INACTIVE,
+                 FatumUserException.FORBIDDEN-> HttpStatus.FORBIDDEN;
             case FatumUserException.USER_ALREADY_EXISTS,
                  FatumUserException.EMAIL_EXISTS,
                  FatumUserException.USERNAME_EXISTS,

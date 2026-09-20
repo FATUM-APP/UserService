@@ -9,7 +9,7 @@ import java.util.List;
 @Repository
 public interface UserRepository extends JpaRepository<User, String> {
 
-    User findByAuth0Id(String auth0Id);
+    User findByAwsId(String auth0Id);
 
     User findByEmailIgnoreCase(String email);
 
@@ -17,7 +17,7 @@ public interface UserRepository extends JpaRepository<User, String> {
 
     User findByPhoneNumber(String phoneNumber);
 
-    User findByDocument(String document);
+    User findByDocumentIgnoreCase(String document);
 
-    List<User> findByNamesIgnoreCase(String names);
+    List<User> findByNameIgnoreCase(String name);
 }

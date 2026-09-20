@@ -9,5 +9,5 @@ import java.util.Optional;
 @Repository
 public interface DocumentFileRepository extends JpaRepository<DocumentFile, String> {
 
-    Optional<DocumentFile> findByUserAuth0Id(String auth0Id);
+    Optional<DocumentFile> findByUserAwsId(String auth0Id);
 }

@@ -29,8 +29,8 @@ public class User {
 
     @Id
     @EqualsAndHashCode.Include
-    @Column(name = "AUTH0_ID", nullable = false, length = 255)
-    private String auth0Id;
+    @Column(name = "AWS_ID", nullable = false, length = 255)
+    private String awsId;
 
     @Column(name = "EMAIL", nullable = false, unique = true, length = 100)
     private String email;
@@ -76,34 +76,36 @@ public class User {
     private Country country = Country.COLOMBIA;
 
     public User(
-            String auth0Id,
+            String awsId,
             String email,
             String name,
             String phoneNumber,
             LocalDate birthDate,
             String username,
             String document,
-            DocumentType documentType
-            ) {
-        this.auth0Id = requireText(auth0Id, "auth0Id");
-        this.email = requireText(email, "email").toLowerCase(Locale.ROOT);
-        this.name = requireText(name, "name").toUpperCase(Locale.ROOT);
-        this.phoneNumber = requireText(phoneNumber, "phoneNumber");
-        this.birthDate = Objects.requireNonNull(birthDate, "birthDate is required");
-        this.username = requireText(username, "username");
-        this.document = requireText(document, "document");
-        this.documentType = Objects.requireNonNull(documentType, "documentType is required");
+            DocumentType documentType,
+            Gender gender
+            ) throws FatumUserException {
+        this.awsId = requireText(awsId);
+        this.email = requireText(email).toLowerCase(Locale.ROOT);
+        this.name = requireText(name).toUpperCase(Locale.ROOT);
+        setPhoneNumber(phoneNumber);
+        this.birthDate = (LocalDate) validateNonNullObject(birthDate);
+        setUsername(username);
+        this.document = requireText(document);
+        this.documentType = (DocumentType) validateNonNullObject(documentType);
         this.isAuthenticated = false;
         this.isActive = true;
         this.country = Country.COLOMBIA;
+        this.gender = (Gender) validateNonNullObject(gender);
     }
 
-    public void setUsername(String newUsername) {
-        this.username = requireText(newUsername, "username");
+    public void setUsername(String newUsername) throws FatumUserException {
+        this.username = requireText(newUsername).toLowerCase(Locale.ROOT);
     }
 
-    public void setPhoneNumber(String newPhoneNumber) {
-        this.phoneNumber = requireText(newPhoneNumber, "phoneNumber");
+    public void setPhoneNumber(String newPhoneNumber) throws FatumUserException {
+        this.phoneNumber = requireText(newPhoneNumber);
     }
 
     public void setRole(UserRole newRole) throws FatumUserException {
@@ -124,9 +126,6 @@ public class User {
     }
 
     public boolean authenticate(boolean authenticated) throws FatumUserException {
-        if (!isActive) {
-            throw new FatumUserException(FatumUserException.INACTIVE);
-        }
         if (authenticated && (document.isBlank() || documentType == null)) {
             throw new FatumUserException(FatumUserException.DOCUMENT_NOT_AUTHENTICATED);
         }
@@ -138,10 +137,13 @@ public class User {
         this.isActive = false;
     }
 
-    private static String requireText(String value, String fieldName) {
-        if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException(fieldName + " is required");
-        }
+    private Object validateNonNullObject(Object value) throws FatumUserException {
+        if (value == null) throw new FatumUserException(FatumUserException.NULL_VALUE);
+        return value;
+    }
+
+    private String requireText(String value) throws FatumUserException {
+        if (value == null || value.isBlank()) throw new FatumUserException(FatumUserException.NULL_VALUE);
         return value.trim();
     }
 }
