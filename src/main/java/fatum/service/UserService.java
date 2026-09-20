@@ -38,6 +38,10 @@ public class UserService {
         return user;
     }
 
+    public User userExistsById(String awsId) {
+        return userRepository.findByAwsId(normalize(awsId));
+    }
+
 
     public User getUserByDocument(String document) throws FatumUserException {
         User user = userRepository.findByDocumentIgnoreCase(normalize(document));
@@ -45,6 +49,10 @@ public class UserService {
             throw new FatumUserException(FatumUserException.USER_NOT_FOUND);
         }
         return user;
+    }
+
+    public User userExistsByDocument(String document) {
+        return userRepository.findByDocumentIgnoreCase(normalize(document));
     }
 
 
@@ -56,12 +64,20 @@ public class UserService {
         return user;
     }
 
+    public User userExistsByUsername(String username) {
+        return userRepository.findByUsernameIgnoreCase(normalize( username));
+    }
+
     public User getUserByEmail(String email) throws FatumUserException {
         User user = userRepository.findByEmailIgnoreCase(normalize(email));
         if (user == null) {
             throw new FatumUserException(FatumUserException.USER_NOT_FOUND);
         }
         return user;
+    }
+
+    public User userExistsByEmail(String email) {
+        return userRepository.findByEmailIgnoreCase(normalize(email));
     }
 
 
@@ -73,8 +89,12 @@ public class UserService {
         return user;
     }
 
+    public User userExistsByPhoneNumber(String phoneNumber) {
+        return userRepository.findByPhoneNumber(normalize(phoneNumber));
+    }
 
-    public List<User> getUsersByName(String name) throws FatumUserException {
+
+    public List<User> getUsersByName(String name) {
         return userRepository.findByNameIgnoreCase(normalize(name));
     }
 
@@ -155,7 +175,7 @@ public class UserService {
     }
 
     private void validateUniqueValues(User user) throws FatumUserException {
-        validateUniqueawsId(user.getAwsId());
+        validateUniqueAwsId(user.getAwsId());
         validateUniqueEmail(user.getEmail(), user.getAwsId());
         validateUniquePhoneNumber(user.getPhoneNumber(), user.getAwsId());
         validateUniqueUsername(user.getUsername(), user.getAwsId());
@@ -163,35 +183,35 @@ public class UserService {
     }
 
     private void validateUniqueEmail(String email, String excludeawsId) throws FatumUserException {
-        User conflict = getUserByEmail(email);
+        User conflict = userExistsByEmail(email);
         if (conflict != null && !conflict.getAwsId().equals(excludeawsId)) {
             throw new FatumUserException(FatumUserException.EMAIL_EXISTS);
         }
     }
 
     private void validateUniqueUsername(String username, String excludeawsId) throws FatumUserException {
-        User conflict = getUserByUsername(username);
+        User conflict = userExistsByUsername(username);
         if (conflict != null && !conflict.getAwsId().equals(excludeawsId)) {
             throw new FatumUserException(FatumUserException.USERNAME_EXISTS);
         }
     }
 
     private void validateUniquePhoneNumber(String phoneNumber, String excludeawsId) throws FatumUserException {
-        User conflict = getUserByPhoneNumber(phoneNumber);
+        User conflict = userExistsByPhoneNumber(phoneNumber);
         if (conflict != null && !conflict.getAwsId().equals(excludeawsId)) {
             throw new FatumUserException(FatumUserException.PHONE_EXISTS);
         }
     }
 
     private void validateUniqueDocument(String document, String excludeawsId) throws FatumUserException {
-        User conflict = getUserByDocument(document);
+        User conflict = userExistsByDocument(document);
         if (conflict != null && !conflict.getAwsId().equals(excludeawsId)) {
             throw new FatumUserException(FatumUserException.DOCUMENT_EXISTS);
         }
     }
 
-    private void validateUniqueawsId(String awsId) throws FatumUserException {
-        if (getUserById(awsId) != null) {
+    private void validateUniqueAwsId(String awsId) throws FatumUserException {
+        if (userExistsById(awsId) != null) {
             throw new FatumUserException(FatumUserException.USER_ALREADY_EXISTS);
         }
     }
