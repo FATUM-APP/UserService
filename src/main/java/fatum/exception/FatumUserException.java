@@ -18,8 +18,10 @@ public class FatumUserException extends Exception {
     public static final String INVALID_IMAGE = "Profile image is required";
     public static final String INVALID_IMAGE_TYPE = "Only image files are allowed";
     public static final String INACTIVE = "User is inactive";
-    public static final String DOCUMENT_NOT_MUTABLE = "You cannot change the document type or number";
-    public static final String DOCUMENT_TYPE_REQUIRED = "Document type and number are required";
+    public static final String FILE_NOT_FOUND = "File not found";
+    public static final String INVALID_DOCUMENT = "Document file is required";
+    public static final String INVALID_DOCUMENT_TYPE = "Only PDF and image document files are allowed";
+    public static final String FORBIDDEN = "You are not allowed to perform this action";
 
     public FatumUserException(String message) {
         super(message);

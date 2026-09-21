@@ -7,66 +7,49 @@ import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
-import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
-import org.springframework.security.oauth2.core.OAuth2Error;
-import org.springframework.security.oauth2.core.OAuth2TokenValidator;
-import org.springframework.security.oauth2.core.OAuth2TokenValidatorResult;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtDecoders;
-import org.springframework.security.oauth2.jwt.JwtValidators;
-import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
+import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 import org.springframework.security.web.SecurityFilterChain;
 
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
 
-    @Value("${auth0.audience}")
-    private String audience;
-
-    @Value("${auth0.domain}")
-    private String domain;
-
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-                .cors(cors -> { })
                 .csrf(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
                                 "/swagger-ui.html",
                                 "/swagger-ui/**",
-                                "/api-docs/**",
-                                "/v3/api-docs/**"
+                                "/users/validate-signup",
+                                "/users/register"
                         ).permitAll()
-                        .requestMatchers(HttpMethod.GET, "/users/active").hasAuthority("SCOPE_read:users")
-                        .requestMatchers(HttpMethod.GET, "/users/search").hasAuthority("SCOPE_read:users")
-                        .requestMatchers(HttpMethod.GET, "/users/username/**").hasAuthority("SCOPE_read:users")
-                        .requestMatchers("/users/**").authenticated()
+
                         .anyRequest().authenticated()
+
                 )
-                .formLogin(AbstractHttpConfigurer::disable)
-                .httpBasic(AbstractHttpConfigurer::disable)
                 .oauth2ResourceServer(oauth2 -> oauth2
-                        .jwt(jwt -> jwt.decoder(jwtDecoder()))
+                        .jwt(jwt -> jwt
+                                .jwtAuthenticationConverter(jwtAuthenticationConverter())
+                        )
                 );
         return http.build();
     }
 
     @Bean
-    public JwtDecoder jwtDecoder() {
-        String issuer = "https://" + domain + "/";
-        NimbusJwtDecoder decoder = JwtDecoders.fromOidcIssuerLocation(issuer);
+    public JwtAuthenticationConverter jwtAuthenticationConverter() {
+        JwtGrantedAuthoritiesConverter grantedAuthoritiesConverter = new JwtGrantedAuthoritiesConverter();
+        // Le decimos a Spring que busque en el atributo cognito:groups
+        grantedAuthoritiesConverter.setAuthoritiesClaimName("cognito:groups");
+        // Le añade el prefijo ROLE_ (estándar de Spring) para que funcione con hasRole()
+        grantedAuthoritiesConverter.setAuthorityPrefix("ROLE_");
 
-        OAuth2TokenValidator<Jwt> audienceValidator = token ->
-                token.getAudience().contains(audience)
-                        ? OAuth2TokenValidatorResult.success()
-                        : OAuth2TokenValidatorResult.failure(
-                        new OAuth2Error("invalid_token", "Invalid audience", null));
-
-        OAuth2TokenValidator<Jwt> issuerValidator = JwtValidators.createDefaultWithIssuer(issuer);
-        decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(issuerValidator, audienceValidator));
-        return decoder;
+        JwtAuthenticationConverter jwtAuthenticationConverter = new JwtAuthenticationConverter();
+        jwtAuthenticationConverter.setJwtGrantedAuthoritiesConverter(grantedAuthoritiesConverter);
+        return jwtAuthenticationConverter;
     }
 }
