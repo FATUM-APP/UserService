@@ -1,4 +1,4 @@
 package fatum.dto;
 
-public record UserStatusResponse(String subject, boolean value) {
+public record UserStatusResponse(boolean isAuthenticated) {
 }

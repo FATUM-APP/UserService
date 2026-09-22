@@ -1,6 +1,6 @@
 package fatum.dto;
 
-import fatum.model.ProfileImage;
+import fatum.exception.FatumUserException;
 import fatum.model.User;
 import org.springframework.stereotype.Component;
 
@@ -9,28 +9,28 @@ import java.util.Objects;
 @Component
 public class UserMapper {
 
-    public User toEntity(String auth0Id, CreateUserRequest request) {
-        Objects.requireNonNull(request, "request is required");
+    private UserMapper() {}
+
+    public static User toEntity(CreateUserRequest request) throws FatumUserException{
+        if (request == null) throw new FatumUserException(FatumUserException.NULL_VALUE);
         return new User(
-                auth0Id,
+                request.awsId(),
                 request.email(),
-                request.names(),
-                request.surnames(),
+                request.name(),
                 request.phoneNumber(),
                 request.birthDate(),
                 request.username(),
                 request.document(),
-                request.documentType());
+                request.documentType(),
+                request.gender()
+        );
     }
 
-    public UserResponse toResponse(User user, String profileImageUrl) {
-        Objects.requireNonNull(user, "user is required");
-        ProfileImageResponse profileImage = toProfileImageResponse(user.getProfileImage(), profileImageUrl);
+    public static UserResponse toResponse(User user) throws FatumUserException {
+        if (user == null) throw new FatumUserException(FatumUserException.NULL_VALUE);
         return new UserResponse(
-                user.getAuth0Id(),
                 user.getEmail(),
-                user.getNames(),
-                user.getSurnames(),
+                user.getName(),
                 user.getBirthDate(),
                 user.getUsername(),
                 user.getPhoneNumber(),
@@ -38,15 +38,9 @@ public class UserMapper {
                 user.isAuthenticated(),
                 user.isActive(),
                 user.getDocument(),
+                user.getGender(),
                 user.getDocumentType(),
                 user.getCity(),
-                profileImage);
-    }
-
-    private ProfileImageResponse toProfileImageResponse(ProfileImage image, String profileImageUrl) {
-        if (image == null) {
-            return null;
-        }
-        return new ProfileImageResponse(image.getId(), profileImageUrl);
+                user.getCountry());
     }
 }

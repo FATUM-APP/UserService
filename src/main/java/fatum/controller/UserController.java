@@ -1,6 +1,5 @@
 package fatum.controller;
 
-import fatum.dto.ActiveUserResponse;
 import fatum.dto.CreateUserRequest;
 import fatum.dto.UserMapper;
 import fatum.dto.UserResponse;
@@ -9,28 +8,16 @@ import fatum.dto.UserUpdateRequest;
 import fatum.exception.FatumUserException;
 import fatum.model.User;
 import fatum.service.UserService;
-import jakarta.validation.Valid;
-import jakarta.validation.constraints.Email;
-import jakarta.validation.constraints.NotBlank;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.bind.annotation.*;
 
-import java.io.IOException;
-import java.util.List;
+
+import static fatum.dto.UserMapper.toResponse;
 
 @RestController
 @RequestMapping("/users")
@@ -38,79 +25,70 @@ import java.util.List;
 public class UserController {
 
     private final UserService userService;
-    private final UserMapper userMapper;
 
-    public UserController(UserService userService, UserMapper userMapper) {
+    @Value("${app.lambda.secret}")
+    private String lambdaSecret;
+
+    public UserController(
+            UserService userService) {
         this.userService = userService;
-        this.userMapper = userMapper;
     }
 
-    @PostMapping
-    public ResponseEntity<UserResponse> createUser(
-            @AuthenticationPrincipal Jwt jwt,
-            @Valid @RequestBody CreateUserRequest request) throws FatumUserException {
-        User newUser = userMapper.toEntity(jwt.getSubject(), request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(toResponse(userService.createUser(newUser)));
+    @PostMapping("/validate-signup")
+    public ResponseEntity<Void> validateSignup(@RequestBody CreateUserRequest dto) throws FatumUserException {
+
+        User tempUser = UserMapper.toEntity(dto);
+        userService.validateUser(tempUser);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/register")
+    public ResponseEntity<UserResponse> registerUser(
+            @RequestBody CreateUserRequest request,
+            @RequestHeader("Lambda-Secret") String receivedSecret
+            ) throws FatumUserException {
+        if (!lambdaSecret.equals(receivedSecret)) throw new FatumUserException(FatumUserException.FORBIDDEN);
+        User newUser = UserMapper.toEntity(request);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(toResponse(userService.createUser(newUser)));
     }
 
     @GetMapping("/me")
     public ResponseEntity<UserResponse> getCurrentUser(@AuthenticationPrincipal Jwt jwt)
             throws FatumUserException {
-        return ResponseEntity.ok(toResponse(userService.getUserById(jwt.getSubject())));
+        String awsId = jwt.getSubject();
+        return ResponseEntity.ok(toResponse(userService.getUserById(awsId)));
     }
 
-    @PutMapping("/me")
+    @PutMapping("/update")
     public ResponseEntity<UserResponse> updateCurrentUser(
             @AuthenticationPrincipal Jwt jwt,
-            @Valid @RequestBody UserUpdateRequest request) throws FatumUserException {
-        return ResponseEntity.ok(toResponse(userService.updateUser(jwt.getSubject(), request)));
-    }
+            @RequestBody UserUpdateRequest request) throws FatumUserException {
+        String awsId = jwt.getSubject();
+        User user = userService.updateUser(
+                awsId,
+                request.username(),
+                request.phoneNumber(),
+                request.role(),
+                request.city()
+        );
 
-    @PutMapping(value = "/me/profile-image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<UserResponse> updateProfileImage(
-            @AuthenticationPrincipal Jwt jwt,
-            @RequestParam("image") MultipartFile image) throws FatumUserException, IOException {
-        return ResponseEntity.ok(toResponse(userService.updateProfileImage(jwt.getSubject(), image)));
+        return ResponseEntity.status(HttpStatus.OK).body(toResponse(user));
     }
 
     @GetMapping("/me/authenticated")
-    public ResponseEntity<UserStatusResponse> isCurrentUserAuthenticated(@AuthenticationPrincipal Jwt jwt)
-            throws FatumUserException {
+    public ResponseEntity<UserStatusResponse> isCurrentUserAuthenticated(
+            @AuthenticationPrincipal Jwt jwt) throws FatumUserException {
         boolean authenticated = userService.userIsAuthenticated(jwt.getSubject());
-        return ResponseEntity.ok(new UserStatusResponse(jwt.getSubject(), authenticated));
+        return ResponseEntity.status(HttpStatus.OK).body(new UserStatusResponse(authenticated));
     }
 
-    @DeleteMapping("/me")
-    public ResponseEntity<Void> deactivateCurrentUser(@AuthenticationPrincipal Jwt jwt)
+    @PutMapping("/deactivate")
+    public ResponseEntity<Void> deactivateCurrentUser(@RequestParam String email)
             throws FatumUserException {
-        userService.deactivateUser(jwt.getSubject());
+        userService.deactivateUser(email);
         return ResponseEntity.noContent().build();
     }
 
-    @GetMapping("/active")
-    public ResponseEntity<ActiveUserResponse> isUserActive(
-            @RequestParam @NotBlank @Email String email) throws FatumUserException {
-        return ResponseEntity.ok(new ActiveUserResponse(email, userService.isUserActiveByEmail(email)));
-    }
 
-    @GetMapping("/search")
-    public ResponseEntity<List<UserResponse>> searchUsers(
-            @RequestParam @NotBlank String names,
-            @RequestParam @NotBlank String surnames) throws FatumUserException {
-        List<UserResponse> users = userService.getUsersByName(names, surnames).stream()
-                .map(this::toResponse)
-                .toList();
-        return ResponseEntity.ok(users);
-    }
-
-    @GetMapping("/username/{username}")
-    public ResponseEntity<UserResponse> getUserByUsername(@PathVariable @NotBlank String username)
-            throws FatumUserException {
-        return ResponseEntity.ok(toResponse(userService.getUserByUsername(username)));
-    }
-
-    private UserResponse toResponse(User user) {
-        String profileImageUrl = userService.getProfileImageUrl(user.getProfileImage());
-        return userMapper.toResponse(user, profileImageUrl);
-    }
 }
