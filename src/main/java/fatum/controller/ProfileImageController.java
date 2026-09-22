@@ -18,7 +18,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 
 @RestController
-@RequestMapping("/users/me/profile-image")
+@RequestMapping("/profile-image")
 public class ProfileImageController {
 
     private final ProfileImageService profileImageService;
@@ -27,7 +27,8 @@ public class ProfileImageController {
         this.profileImageService = profileImageService;
     }
 
-    @PutMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+
+    @PutMapping(path = "/update",consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<StoredFileResponse> replace(
             @AuthenticationPrincipal Jwt jwt,
             @RequestParam("image") MultipartFile image)
@@ -35,7 +36,7 @@ public class ProfileImageController {
         return ResponseEntity.ok(profileImageService.replace(jwt.getSubject(), image));
     }
 
-    @GetMapping
+    @GetMapping({"", "/"})
     public ResponseEntity<StoredFileResponse> get(
             @AuthenticationPrincipal Jwt jwt) throws FatumUserException {
         return ResponseEntity.ok(profileImageService.get(jwt.getSubject()));

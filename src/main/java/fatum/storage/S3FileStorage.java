@@ -85,4 +85,22 @@ public class S3FileStorage {
         }
         return safeFilename;
     }
+
+    public StoredObject upload(
+            byte[] content,
+            String bucket,
+            String prefix,
+            String safeFilename,
+            String contentType) {
+        String objectKey = prefix + "/" + UUID.randomUUID() + "-" + safeFilename;
+        PutObjectRequest request = PutObjectRequest.builder()
+                .bucket(bucket)
+                .key(objectKey)
+                .contentType(contentType)
+                .contentLength((long) content.length)
+                .build();
+
+        s3Client.putObject(request, RequestBody.fromBytes(content));
+        return new StoredObject(objectKey, safeFilename, contentType, content.length);
+    }
 }
