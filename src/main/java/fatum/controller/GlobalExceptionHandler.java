@@ -33,7 +33,7 @@ public class GlobalExceptionHandler {
             case FatumUserException.USER_NOT_FOUND,
                  FatumUserException.FILE_NOT_FOUND -> HttpStatus.NOT_FOUND;
             case FatumUserException.INACTIVE,
-                 FatumUserException.FORBIDDEN-> HttpStatus.FORBIDDEN;
+                 FatumUserException.FORBIDDEN -> HttpStatus.FORBIDDEN;
             case FatumUserException.USER_ALREADY_EXISTS,
                  FatumUserException.EMAIL_EXISTS,
                  FatumUserException.USERNAME_EXISTS,
@@ -41,8 +41,14 @@ public class GlobalExceptionHandler {
                  FatumUserException.DOCUMENT_EXISTS,
                  FatumUserException.VERIFICATION_ALREADY_COMPLETED,
                  FatumUserException.NO_ATTEMPTS_LEFT,
-                 FatumUserException.PROFILE_PHOTO_MISMATCH -> HttpStatus.CONFLICT;
-            case FatumUserException.VERIFICATION_DISABLED -> HttpStatus.SERVICE_UNAVAILABLE;
+                 FatumUserException.LIVENESS_NOT_REQUIRED,
+                 FatumUserException.LIVENESS_SESSION_NOT_FOUND,
+                 FatumUserException.PROFILE_REFERENCE_MISSING -> HttpStatus.CONFLICT;
+            case FatumUserException.PROFILE_PHOTO_TOO_MANY_CHANGES,
+                 FatumUserException.LIVENESS_TOO_MANY_SESSIONS -> HttpStatus.TOO_MANY_REQUESTS;
+            case FatumUserException.VERIFICATION_DISABLED,
+                 FatumUserException.LIVENESS_DISABLED,
+                 FatumUserException.LIVENESS_UNAVAILABLE -> HttpStatus.SERVICE_UNAVAILABLE;
             default -> HttpStatus.BAD_REQUEST;
         };
         return buildError(status, exception.getMessage(), request.getRequestURI(), Map.of());

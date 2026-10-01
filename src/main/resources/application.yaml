@@ -74,10 +74,14 @@ fatum:
     min-face-match: ${VERIFICATION_MIN_FACE_MATCH:20}
     profile-photo-change-threshold: ${VERIFICATION_PROFILE_PHOTO_THRESHOLD:80}
     face-similarity-threshold: ${VERIFICATION_FACE_SIMILARITY:80}
+    # Pending profile picture changes a user can queue in a day; it is a cost limit, not a security one.
+    max-pending-photo-changes-per-day: ${VERIFICATION_MAX_PHOTO_CHANGES:5}
     weights:
       document-match: ${VERIFICATION_WEIGHT_DOCUMENT:0.35}
-      document-liveness-match: ${VERIFICATION_WEIGHT_DOCUMENT_LIVENESS:0.30}
-      profile-liveness-match: ${VERIFICATION_WEIGHT_PROFILE_LIVENESS:0.20}
+      # Weight of the document against the profile picture, the cheap check of the first phase.
+      document-liveness-match: ${VERIFICATION_WEIGHT_DOCUMENT_PROFILE:0.30}
+      # Weight of the live reference against the document, only used by the second phase.
+      profile-liveness-match: ${VERIFICATION_WEIGHT_REFERENCE_DOCUMENT:0.20}
       authenticity: ${VERIFICATION_WEIGHT_AUTHENTICITY:0.15}
     analyzers:
       textract-enabled: ${VERIFICATION_TEXTRACT_ENABLED:true}
@@ -86,6 +90,18 @@ fatum:
       bedrock-model-id: ${VERIFICATION_BEDROCK_MODEL_ID:anthropic.claude-3-5-sonnet-20241022-v2:0}
       bedrock-max-tokens: ${VERIFICATION_BEDROCK_MAX_TOKENS:800}
       bedrock-temperature: ${VERIFICATION_BEDROCK_TEMPERATURE:0}
+    # --------------------------------------------------------------------------------------------
+    # Proof of life with Rekognition Face Liveness. It is the only step that costs money on every
+    # attempt, and it can only be requested once the free checks have passed.
+    # --------------------------------------------------------------------------------------------
+    liveness:
+      enabled: ${VERIFICATION_LIVENESS_ENABLED:true}
+      bucket: ${S3_LIVENESS_BUCKET:}
+      key-prefix: ${VERIFICATION_LIVENESS_PREFIX:liveness}
+      min-confidence: ${VERIFICATION_LIVENESS_MIN_CONFIDENCE:80}
+      audit-images-limit: ${VERIFICATION_LIVENESS_AUDIT_IMAGES:0}
+      session-ttl: ${VERIFICATION_LIVENESS_SESSION_TTL:3m}
+      max-sessions-per-attempt: ${VERIFICATION_LIVENESS_MAX_SESSIONS:3}
 
 app:
   cors:

@@ -1,7 +1,10 @@
 package fatum.model;
 
+import fatum.model.constant.ReferenceSource;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -17,10 +20,12 @@ import lombok.NoArgsConstructor;
 import java.time.Instant;
 
 /**
- * Liveness evidence of a user: the frame captured by the liveness proof.
+ * The trusted picture of a user: the image every later comparison uses.
  *
- * <p>It is the reference picture every later comparison uses: the identity document is compared
- * against it, and a profile picture change is accepted only when the new picture still matches it.</p>
+ * <p>It is produced by Rekognition while running the proof of life, which writes it straight to S3,
+ * so the row keeps the bucket and the key instead of the bytes. Only when an administrator adopts a
+ * picture by hand does the object live in the ordinary liveness route, and then the bucket is left
+ * empty because the storage service already knows where that route points.</p>
  */
 @Entity
 @Table(name = "LIVENESS_FILES")
@@ -44,8 +49,17 @@ public class LivenessFile {
     @Column(name = "CONTENT_TYPE", nullable = false, length = 100)
     private String contentType;
 
+    /** Zero when the object was written by Rekognition, which does not report a size. */
     @Column(name = "FILE_SIZE", nullable = false)
     private long fileSize;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "SOURCE", nullable = false, length = 20)
+    private ReferenceSource source;
+
+    /** Set only when the object lives in a bucket the storage service does not route. */
+    @Column(name = "STORAGE_BUCKET", length = 255)
+    private String storageBucket;
 
     @Column(name = "CREATED_AT", nullable = false, updatable = false)
     private Instant createdAt;
@@ -62,23 +76,44 @@ public class LivenessFile {
             String originalFilename,
             String contentType,
             long fileSize,
+            ReferenceSource source,
+            String storageBucket,
             User user) {
-        apply(livenessKey, originalFilename, contentType, fileSize);
+        apply(livenessKey, originalFilename, contentType, fileSize, source, storageBucket);
         this.user = user;
         this.createdAt = Instant.now();
         this.updatedAt = this.createdAt;
     }
 
-    public void replace(String livenessKey, String originalFilename, String contentType, long fileSize) {
-        apply(livenessKey, originalFilename, contentType, fileSize);
+    public void replace(
+            String livenessKey,
+            String originalFilename,
+            String contentType,
+            long fileSize,
+            ReferenceSource source,
+            String storageBucket) {
+        apply(livenessKey, originalFilename, contentType, fileSize, source, storageBucket);
         this.updatedAt = Instant.now();
     }
 
-    private void apply(String livenessKey, String originalFilename, String contentType, long fileSize) {
+    /** True when the comparator can read the object straight from S3 instead of downloading it. */
+    public boolean hasStorageBucket() {
+        return storageBucket != null && !storageBucket.isBlank();
+    }
+
+    private void apply(
+            String livenessKey,
+            String originalFilename,
+            String contentType,
+            long fileSize,
+            ReferenceSource source,
+            String storageBucket) {
         this.livenessKey = requireText(livenessKey, "livenessKey");
         this.originalFilename = requireText(originalFilename, "originalFilename");
         this.contentType = requireText(contentType, "contentType");
         this.fileSize = requireNonNegative(fileSize);
+        this.source = source == null ? ReferenceSource.ADMIN : source;
+        this.storageBucket = storageBucket;
     }
 
     private static String requireText(String value, String fieldName) {

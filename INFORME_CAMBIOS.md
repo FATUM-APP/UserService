@@ -280,7 +280,190 @@ al volver a subir uno se reemplazan y se borran sus objetos.
 | **Rama `dev` sin remoto** | Los cambios están en local, en `feat/shared-storage-and-verification`; no se ha hecho push. |
 | **Umbrales** | Los valores por defecto (80/30/20/70) son un punto de partida razonable; conviene calibrarlos con documentos reales. |
 | **Antifraude con Bedrock** | El modelo juzga a partir de los campos leídos, no de la imagen. Si se quiere análisis de píxeles haría falta otra estrategia. |
-| **Detección de vida real** | El "liveness" es un frame comparado con Rekognition, no una prueba de vida activa (parpadeo, giro de cabeza). Si el negocio la exige, hay que añadirla. |
+| **Detección de vida real** | **Resuelto en la segunda iteración (ver §10)**: se sustituyó el frame subido a mano por Rekognition Face Liveness. |
 | **`MIGRATION_REPORT.md`** | Es el informe de una migración anterior; se conserva como histórico. |
 | **Notificaciones** | Cuando un caso pasa a `MANUAL_REVIEW` no se avisa a nadie: falta correo o evento. |
 | **Reintentos tras un rechazo** | Hoy un `REJECTED` definitivo exige que un administrador reabra el caso; no hay endpoint para eso. |
+---
+
+# Segunda iteración — prueba de vida real y cambio de foto asíncrono
+
+**Fecha:** 1 de octubre de 2026
+**Rama:** `feat/shared-storage-and-verification` (local, sin push)
+
+## 10. Qué cambió y por qué
+
+### 10.1 El problema del "liveness" falso
+
+La iteración anterior comprobaba la identidad con un frame que el cliente subía a mano. Eso tiene dos
+fallos que no se arreglan con umbrales: una foto de una persona viva no prueba que haya alguien vivo
+frente a la pantalla, y el atacante podía ser una persona distinta de la dueña del documento. Además,
+cada intento costaba una llamada a Rekognition aunque el documento claramente no cuadrara.
+
+Se reemplazó por **Amazon Rekognition Face Liveness**, que es una prueba de vida activa: la app abre una
+sesión, transmite la cámara directamente a AWS y el servicio recibe el veredicto y una imagen de
+referencia del rostro que pasó la prueba.
+
+### 10.2 Las dos fases: primero gratis, después el pago
+
+El orden es la regla de negocio, no un detalle de implementación:
+
+| Fase | Coste | Qué se comprueba | Qué decide |
+| --- | --- | --- | --- |
+| 1. `POST /verification/submit` | gratis | Textract + campos + documento↔perfil + Bedrock | si hay que gastar en la fase 2 |
+| 2. `POST /liveness/sessions` + `/complete` | **se paga por intento** | vida real + referencia↔documento | la verificación |
+
+Si la fase 1 da `VERIFIED` (≥ 80 %) el intento queda `AWAITING_LIVENESS`: la cuenta **no** se verifica
+todavía y solo entonces se puede abrir una prueba de vida. Si da `MANUAL` el usuario conserva sus
+reintentos y no se gasta nada; si da `REJECTED` va a revisión manual. Así, subir fotos para tantear el
+sistema no cuesta dinero.
+
+Guardas adicionales sobre el paso pagado:
+
+* `POST /liveness/sessions` responde `409` si no hay un intento esperando la prueba: no se puede pedir
+  "por si acaso".
+* Una sesión que sigue abierta se reutiliza, para que un reintento por fallo de red no pague dos veces.
+* Tope de sesiones por intento (`max-sessions-per-attempt`, 3 por defecto).
+
+### 10.3 Se cierra el hueco de seguridad
+
+La fase 1 compara el documento con la foto de perfil, y ambas son imágenes que un atacante puede tener:
+la cédula robada y una selfie de redes sociales. La prueba de vida demuestra que hay alguien vivo… pero
+ese alguien podría ser el atacante y no el dueño del documento.
+
+Por eso la fase 2 hace **dos** comparaciones:
+
+```
+Foto de perfil ──┬─ compare ──► Foto del documento     (fase 1, gratis)
+                 │
+Cámara en vivo ──┴─ Face Liveness ──► Referencia ── compare ──► Foto del documento   (fase 2, decisiva)
+```
+
+La segunda es barata (Rekognition ya devolvió la referencia) y es la que cierra el hueco: **no se
+verifica a nadie cuyo rostro en vivo no coincida con el documento**. Si esa comparación no se puede
+evaluar, el caso va a un humano; nunca se aprueba "por defecto".
+
+### 10.4 Se eliminó `POST /liveness/upload`
+
+Se quitó por completo (opción A). Una foto subida a mano no prueba nada, así que el endpoint ya no
+existe: ni siquiera detrás de una bandera. Las apps que lo usaran deben pasar a
+`POST /liveness/sessions` + `FaceLivenessDetector` + `POST /liveness/sessions/{id}/complete`.
+
+Consecuencia: **una cuenta solo puede adquirir una referencia de confianza de dos formas**, y ambas
+quedan registradas con su origen (`liveness_files.source`):
+
+| Origen | Quién la produce | Cuándo |
+| --- | --- | --- |
+| `REKOGNITION` | Face Liveness, escrita en el bucket de vida | al pasar la prueba |
+| `ADMIN` | un administrador, subiéndola durante una revisión manual | al confirmar la identidad |
+
+### 10.5 Cambio de foto de perfil: se acepta o se descarta
+
+Una cuenta verificada puede cambiar su foto, pero nunca queda "en verificación" ni esperando a una
+persona:
+
+1. `PUT /profile-image/update` guarda la imagen nueva como `PENDING` (nadie la ve; la anterior sigue
+   visible) y responde `pendingVerification: true`. Nada se publica antes de comparar.
+2. Después del commit del upload, `PendingProfilePhotoVerifier` compara en otro hilo la imagen nueva con
+   la referencia de vida.
+3. Si la similitud alcanza el umbral, la nueva sustituye a la anterior y el objeto viejo se borra del
+   bucket. Si no, se descarta: **se borra la fila y el objeto**, y la foto anterior permanece.
+4. `GET /profile-image` informa `pendingVerification` y `lastChangeOutcome`
+   (`PENDING` / `VERIFIED` / `REJECTED`), que es lo que el cliente consulta.
+
+Si la comparación no se puede evaluar (Rekognition caído, almacenamiento caído) **se descarta**. Publicar
+a ciegas permitiría cambiar la cara de una cuenta verificada durante una caída. Hay un tope de cambios
+por día, que es un límite de coste, no de seguridad.
+
+Antes de existir una verificación no hay nada con qué comparar y el cambio sigue siendo inmediato.
+
+### 10.6 Impacto en la retención de evidencia
+
+La evidencia se conserva mientras haga falta y se borra en cuanto deja de hacer falta:
+
+| Resultado | Documento | Referencia de vida | Foto de perfil |
+| --- | --- | --- | --- |
+| `AWAITING_LIVENESS` | se conserva | se creará al pasar la prueba | se conserva |
+| `VERIFIED` | se borra | se conserva | se conserva |
+| `PENDING` (reintento) | se borra | se borra | se borra |
+| `MANUAL_REVIEW` / `REJECTED` | se conserva para el revisor | se conserva **si la produjo Rekognition** (es la prueba de quién estaba en la cámara) | se borra |
+
+Todo queda auditado en `storage_events`, con el motivo nuevo `LIVENESS_PENDING`.
+
+## 11. Inventario de esta iteración
+
+### 11.1 Nuevos
+
+| Área | Clases |
+| --- | --- |
+| Prueba de vida | `analyzer/FaceLivenessClient`, `RekognitionFaceLivenessClient`, `LivenessSession`, `LivenessResult`, `LivenessStatus` |
+| Orquestación | `LivenessSessionService`, `PendingProfilePhotoVerifier`, `ProfileImageChangedEvent` |
+| Modelo | `LivenessCheck`, `constant/LivenessCheckStatus`, `constant/ReferenceSource`, `constant/ProfileImageStatus`, `constant/VerificationAttemptType` |
+| Repositorio | `LivenessCheckRepository` |
+| DTOs | `LivenessSessionResponse`, `LivenessResultResponse`, `ProfileImageResponse` |
+| Configuración | `AsyncConfig` (pool `verificationExecutor`) |
+| Migraciones | `V10`…`V13` |
+
+### 11.2 Eliminados
+
+* `POST /liveness/upload` y la subida manual del frame (`LivenessService.upload`).
+* Las constantes `INVALID_LIVENESS*` y `PROFILE_PHOTO_MISMATCH`, que ya no se pueden producir.
+
+### 11.3 Modificados
+
+`VerificationService` (dos fases y `awaitingLiveness`), `VerificationPolicy` (decide la prueba de vida),
+`VerificationProperties` (bloque `liveness` y umbral de cambios de foto), `VerificationRetentionService`
+(caso `AWAITING_LIVENESS`), `ProfileImageService` (encola en vez de comparar), `ProfileImage` (estado
+`ACTIVE`/`PENDING`), `LivenessFile` (origen y bucket), `VerificationAttempt` (tipo, dos comparaciones,
+`decidedAt`, `livenessConfidence`), `LivenessController`, `ProfileImageController`,
+`VerificationController`, `GlobalExceptionHandler`, `FaceComparator` (comparar contra un objeto de S3),
+`application.yaml`, `README.md`, `API.md`, `.env.example`.
+
+### 11.4 Migraciones nuevas
+
+| Versión | Contenido |
+| --- | --- |
+| `V10` | tabla `liveness_checks` |
+| `V11` | `type` en `verification_attempts`, renombra las dos columnas de comparación, `liveness_confidence`, `decided_at` |
+| `V12` | `profile_images.status` y la unicidad por usuario y estado |
+| `V13` | `liveness_files.source` y `storage_bucket` |
+
+## 12. Pruebas
+
+```
+./mvnw verify        →  230 pruebas, 0 fallos, cobertura ≥ 70 % (JaCoCo)
+```
+
+Se añadieron dos suites nuevas y se reescribieron las de la política, el orquestador, la retención, la
+foto de perfil y la referencia de vida:
+
+* `LivenessSessionServiceTest` (15) — guardas del paso pagado, reutilización de sesiones, veredictos,
+  idempotencia y el caso en que otro usuario intenta reportar la sesión.
+* `PendingProfilePhotoVerifierTest` (13) — publicar, descartar y **fallar cerrado** cuando la comparación
+  no se puede evaluar.
+* `VerificationPolicyTest` (23) — las dos fases por separado, incluida la regla "la prueba de vida falla
+  → humano, sin segundo intento".
+
+## 13. Despliegue de esta iteración
+
+1. Aplicar checkpoints (`V10`…`V13`) — los ejecuta Flyway al arrancar.
+2. Crear el bucket `S3_LIVENESS_BUCKET` (por ejemplo `fatum-liveness`).
+3. Permisos IAM nuevos: `rekognition:CreateFaceLivenessSession`, `rekognition:GetFaceLivenessSessionResults`
+   y lectura del bucket de vida (S3 `GetObject`, porque el comparador lee la referencia directamente).
+4. Configurar `S3_LIVENESS_BUCKET` y el prefijo; si falta el bucket, la prueba de vida responde `503` y
+   el resto del servicio sigue funcionando.
+5. Actualizar las apps: quitar la subida del frame e integrar `FaceLivenessDetector` de Amplify.
+6. Ventana de despliegue: las migraciones van en el mismo arranque de la versión nueva. La versión
+   anterior no entiende `verification_attempts.type` ni `profile_images.status`, así que no conviene
+   dejar las dos corriendo a la vez sobre la misma base de datos.
+
+## 14. Pendientes de esta iteración
+
+| Tema | Situación |
+| --- | --- |
+| **Veredicto asíncrono** | `POST /liveness/sessions/{id}/complete` se llama desde el cliente. Si quiere desacoplarse por completo (Lambda + webhook de Rekognition), el punto de entrada ya son los servicios, no los controladores. |
+| **Reintento tras un rechazo** | Un `REJECTED` o un `MANUAL_REVIEW` por fallo de vida no se puede reabrir desde la app; sigue haciendo falta que un administrador lo haga. |
+| **Notificaciones** | Cuando un caso cae en `MANUAL_REVIEW` nadie recibe un aviso. |
+| **Copia de los audit images** | `audit-images-limit` está en 0: no se guarda ninguna imagen del intento fallido, solo la referencia. |
+| **Retención temporal** | La política se aplica por evento (fin del intento); no hay un trabajo programado que borre evidencia antigua de casos abiertos. |
+| **Rama sin push** | Los cambios de las dos iteraciones están en local. |

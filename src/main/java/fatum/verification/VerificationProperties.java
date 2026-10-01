@@ -2,6 +2,8 @@ package fatum.verification;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
+import java.time.Duration;
+
 /**
  * Every threshold of the identity verification process.
  *
@@ -41,9 +43,17 @@ public class VerificationProperties {
     /** Similarity Rekognition has to report for two faces to be considered the same person. */
     private double faceSimilarityThreshold = 80d;
 
+    /**
+     * Pending profile picture changes a user can queue in a day. It is not a security limit but a
+     * cost one: every queued picture spends a face comparison.
+     */
+    private int maxPendingPhotoChangesPerDay = 5;
+
     private Weights weights = new Weights();
 
     private Analyzers analyzers = new Analyzers();
+
+    private Liveness liveness = new Liveness();
 
     public boolean isEnabled() {
         return enabled;
@@ -131,6 +141,22 @@ public class VerificationProperties {
 
     public void setAnalyzers(Analyzers analyzers) {
         this.analyzers = analyzers;
+    }
+
+    public int getMaxPendingPhotoChangesPerDay() {
+        return maxPendingPhotoChangesPerDay;
+    }
+
+    public void setMaxPendingPhotoChangesPerDay(int maxPendingPhotoChangesPerDay) {
+        this.maxPendingPhotoChangesPerDay = maxPendingPhotoChangesPerDay;
+    }
+
+    public Liveness getLiveness() {
+        return liveness;
+    }
+
+    public void setLiveness(Liveness liveness) {
+        this.liveness = liveness;
     }
 
     /**
@@ -242,6 +268,93 @@ public class VerificationProperties {
 
         public void setBedrockTemperature(double bedrockTemperature) {
             this.bedrockTemperature = bedrockTemperature;
+        }
+    }
+
+    /**
+     * Proof of life with Rekognition Face Liveness.
+     *
+     * <p>It is the only paid step of the pipeline, which is why it is never reached from the public
+     * API directly: a session can only be opened while a cheap first phase is waiting for it.</p>
+     */
+    public static class Liveness {
+
+        private boolean enabled = true;
+
+        /** Bucket where Rekognition writes the reference picture. */
+        private String bucket = "";
+
+        private String keyPrefix = "liveness";
+
+        /** Confidence Rekognition has to report for the proof of life to count as passed. */
+        private double minConfidence = 80d;
+
+        /** Audit images are not kept: the reference picture is the only one the business needs. */
+        private int auditImagesLimit = 0;
+
+        /** How long the session is usable; Rekognition expires it by itself after a few minutes. */
+        private Duration sessionTtl = Duration.ofMinutes(3);
+
+        /**
+         * Sessions one attempt can open. It is not a security rule but a cost one: an attempt that is
+         * abandoned before the camera opens must not be able to ask Rekognition for sessions forever.
+         */
+        private int maxSessionsPerAttempt = 3;
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public String getBucket() {
+            return bucket;
+        }
+
+        public void setBucket(String bucket) {
+            this.bucket = bucket;
+        }
+
+        public String getKeyPrefix() {
+            return keyPrefix;
+        }
+
+        public void setKeyPrefix(String keyPrefix) {
+            this.keyPrefix = keyPrefix;
+        }
+
+        public double getMinConfidence() {
+            return minConfidence;
+        }
+
+        public void setMinConfidence(double minConfidence) {
+            this.minConfidence = minConfidence;
+        }
+
+        public int getAuditImagesLimit() {
+            return auditImagesLimit;
+        }
+
+        public void setAuditImagesLimit(int auditImagesLimit) {
+            this.auditImagesLimit = auditImagesLimit;
+        }
+
+        public Duration getSessionTtl() {
+            return sessionTtl;
+        }
+
+        public void setSessionTtl(Duration sessionTtl) {
+            this.sessionTtl = sessionTtl;
+        }
+
+        public int getMaxSessionsPerAttempt() {
+            return maxSessionsPerAttempt;
+        }
+
+        public void setMaxSessionsPerAttempt(int maxSessionsPerAttempt) {
+            this.maxSessionsPerAttempt = maxSessionsPerAttempt;
         }
     }
 }

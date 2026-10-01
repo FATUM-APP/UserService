@@ -1,5 +1,6 @@
 package fatum.model;
 
+import fatum.model.constant.VerificationAttemptType;
 import fatum.model.constant.VerificationBand;
 import fatum.model.constant.VerificationDecision;
 import fatum.model.constant.VerificationOutcome;
@@ -22,11 +23,15 @@ import lombok.NoArgsConstructor;
 import java.time.Instant;
 
 /**
- * One run of the identity verification pipeline.
+ * One run of a verification pipeline, either a full identity verification or the check of a new
+ * profile picture.
  *
- * <p>It keeps the full picture of the decision: the scoring band, the final outcome, who decided
- * (system or administrator), every partial score, the evidence that was used and the human notes. The
- * attempt history is what lets the policy decide between retrying, rejecting or escalating.</p>
+ * <p>It keeps the full picture of the decision: the scoring band, the outcome, who decided (system or
+ * administrator), every partial score, the evidence that was used and the human notes. The history is
+ * what lets the policy decide between retrying, rejecting or escalating.</p>
+ *
+ * <p>A full attempt is written twice: first as {@code AWAITING_LIVENESS} with the result of the cheap
+ * phase, and again when Rekognition answers the proof of life.</p>
  */
 @Entity
 @Table(name = "VERIFICATION_ATTEMPTS")
@@ -44,6 +49,10 @@ public class VerificationAttempt {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "USER_AWS_ID", nullable = false)
     private User user;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "TYPE", nullable = false, length = 20)
+    private VerificationAttemptType type;
 
     @Column(name = "ATTEMPT_NUMBER", nullable = false)
     private int attemptNumber;
@@ -63,14 +72,21 @@ public class VerificationAttempt {
     @Column(name = "SCORE", nullable = false)
     private double score;
 
+    /** How much of the document Textract read agrees with what the user registered. */
     @Column(name = "DOCUMENT_MATCH")
     private double documentMatch;
 
-    @Column(name = "DOCUMENT_LIVENESS_MATCH")
-    private double documentLivenessMatch;
+    /** Whether the face of the document and the face of the profile picture are the same person. */
+    @Column(name = "DOCUMENT_PROFILE_MATCH")
+    private double documentProfileMatch;
 
-    @Column(name = "PROFILE_LIVENESS_MATCH")
-    private double profileLivenessMatch;
+    /** Whether the picture Rekognition produced during the proof of life matches the document. */
+    @Column(name = "REFERENCE_DOCUMENT_MATCH")
+    private double referenceDocumentMatch;
+
+    /** Confidence of the proof of life, 0 to 100. Only a full attempt has one. */
+    @Column(name = "LIVENESS_CONFIDENCE")
+    private Double livenessConfidence;
 
     @Column(name = "FRAUD_RISK")
     private double fraudRisk;
@@ -96,6 +112,9 @@ public class VerificationAttempt {
     @Column(name = "DECIDED_BY", length = 255)
     private String decidedBy;
 
+    @Column(name = "DECIDED_AT")
+    private Instant decidedAt;
+
     @Column(name = "NOTES", length = 1000)
     private String notes;
 
@@ -104,14 +123,15 @@ public class VerificationAttempt {
 
     public VerificationAttempt(
             User user,
+            VerificationAttemptType type,
             int attemptNumber,
             VerificationBand band,
             VerificationOutcome outcome,
             VerificationDecision decision,
             double score,
             double documentMatch,
-            double documentLivenessMatch,
-            double profileLivenessMatch,
+            double documentProfileMatch,
+            double referenceDocumentMatch,
             double fraudRisk,
             String summary,
             String flags,
@@ -120,14 +140,15 @@ public class VerificationAttempt {
             String livenessKey,
             String profileImageKey) {
         this.user = user;
+        this.type = type;
         this.attemptNumber = attemptNumber;
         this.band = band;
         this.outcome = outcome;
         this.decision = decision;
         this.score = clamp(score);
         this.documentMatch = clamp(documentMatch);
-        this.documentLivenessMatch = clamp(documentLivenessMatch);
-        this.profileLivenessMatch = clamp(profileLivenessMatch);
+        this.documentProfileMatch = clamp(documentProfileMatch);
+        this.referenceDocumentMatch = clamp(referenceDocumentMatch);
         this.fraudRisk = clamp(fraudRisk);
         this.summary = truncate(summary);
         this.flags = truncate(flags);
@@ -138,11 +159,38 @@ public class VerificationAttempt {
         this.createdAt = Instant.now();
     }
 
+    /**
+     * Rewrites the attempt when the proof of life is answered, or when an administrator decides.
+     *
+     * <p>The identity cannot be confirmed by the cheap phase alone, so the outcome of an open attempt
+     * is always replaced here, never appended as a new row: one attempt is one row.</p>
+     */
+    public void resolve(
+            VerificationBand newBand,
+            VerificationOutcome newOutcome,
+            Double confidence,
+            double referenceDocumentMatch,
+            String newSummary,
+            String newFlags,
+            String referenceKey) {
+        this.band = newBand;
+        this.outcome = newOutcome;
+        this.livenessConfidence = confidence == null ? null : clamp(confidence);
+        this.referenceDocumentMatch = clamp(referenceDocumentMatch);
+        this.summary = truncate(newSummary);
+        this.flags = truncate(newFlags);
+        if (referenceKey != null && !referenceKey.isBlank()) {
+            this.livenessKey = referenceKey;
+        }
+        this.decidedAt = Instant.now();
+    }
+
     /** Records the administrator that reviewed the case. */
     public void decidedByAdmin(String adminSubject, String notes) {
         this.decision = VerificationDecision.ADMIN;
         this.decidedBy = adminSubject;
         this.notes = truncate(notes);
+        this.decidedAt = Instant.now();
     }
 
     public String flagsAsText() {

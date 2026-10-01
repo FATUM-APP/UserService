@@ -18,9 +18,9 @@ import java.util.List;
 /**
  * Identity verification of the authenticated user.
  *
- * <p>The flow the client follows is: upload the identity document, upload the liveness frame, make sure a
- * profile picture exists, then submit. The status endpoint tells the client which of those steps is still
- * missing and how many attempts are left.</p>
+ * <p>The flow the client follows is: upload the identity document, make sure a profile picture exists,
+ * submit, and then run the proof of life if the status asks for it. The status endpoint tells the
+ * client which of those steps is still missing and how many attempts are left.</p>
  */
 @RestController
 @RequestMapping("/verification")
@@ -49,8 +49,9 @@ public class VerificationController {
                 state.attemptsRemaining(),
                 state.canAttempt(),
                 state.documentUploaded(),
-                state.livenessUploaded(),
+                state.livenessCompleted(),
                 state.profileImageUploaded(),
+                state.livenessRequired(),
                 VerificationAttemptResponse.from(state.lastAttempt())));
     }
 

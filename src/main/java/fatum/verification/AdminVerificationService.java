@@ -10,6 +10,7 @@ import fatum.model.User;
 import fatum.model.VerificationAttempt;
 import fatum.model.constant.StorageEventReason;
 import fatum.model.constant.StoredFileType;
+import fatum.model.constant.VerificationAttemptType;
 import fatum.model.constant.VerificationBand;
 import fatum.model.constant.VerificationDecision;
 import fatum.model.constant.VerificationOutcome;
@@ -114,7 +115,8 @@ public class AdminVerificationService {
         if (user == null) {
             throw new FatumUserException(FatumUserException.USER_NOT_FOUND);
         }
-        List<VerificationAttempt> attempts = attemptRepository.findByUserAwsIdOrderByAttemptNumberAsc(user.getAwsId());
+        List<VerificationAttempt> attempts = attemptRepository
+                .findByUserAwsIdAndTypeOrderByAttemptNumberAsc(user.getAwsId(), VerificationAttemptType.FULL);
         int attemptNumber = attempts.size() + 1;
         double score = attempts.isEmpty() ? 0d : attempts.get(attempts.size() - 1).getScore();
 
@@ -140,10 +142,11 @@ public class AdminVerificationService {
 
         DocumentFile document = documentFileRepository.findByUserAwsId(user.getAwsId()).orElse(null);
         LivenessFile liveness = livenessFileRepository.findByUserAwsId(user.getAwsId()).orElse(null);
-        ProfileImage profileImage = profileImageRepository.findByUserAwsId(user.getAwsId()).orElse(null);
+        ProfileImage profileImage = profileImageRepository.findActive(user.getAwsId()).orElse(null);
 
         VerificationAttempt attempt = new VerificationAttempt(
                 user,
+                VerificationAttemptType.FULL,
                 attemptNumber,
                 band,
                 outcome,
@@ -178,6 +181,7 @@ public class AdminVerificationService {
                 attempt.getDocumentMatch(),
                 0d,
                 0d,
+                null,
                 0d,
                 band,
                 outcome,
@@ -188,7 +192,8 @@ public class AdminVerificationService {
     }
 
     private PendingVerificationResponse toPendingResponse(User user) {
-        List<VerificationAttempt> attempts = attemptRepository.findByUserAwsIdOrderByAttemptNumberAsc(user.getAwsId());
+        List<VerificationAttempt> attempts = attemptRepository
+                .findByUserAwsIdAndTypeOrderByAttemptNumberAsc(user.getAwsId(), VerificationAttemptType.FULL);
         VerificationAttempt last = attempts.isEmpty() ? null : attempts.get(attempts.size() - 1);
         return new PendingVerificationResponse(
                 user.getAwsId(),

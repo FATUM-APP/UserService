@@ -9,6 +9,7 @@ import fatum.model.User;
 import fatum.model.VerificationAttempt;
 import fatum.model.constant.StorageEventReason;
 import fatum.model.constant.StoredFileType;
+import fatum.model.constant.VerificationAttemptType;
 import fatum.model.constant.VerificationDecision;
 import fatum.model.constant.VerificationOutcome;
 import fatum.model.constant.VerificationStatus;
@@ -81,7 +82,7 @@ class AdminVerificationServiceTest {
 
     @Test
     void confirmingTheIdentityAdoptsTheUploadedPictureAsProfilePictureAndLiveness() throws Exception {
-        when(attemptRepository.findByUserAwsIdOrderByAttemptNumberAsc(Fixtures.USER_ID))
+        when(attemptRepository.findByUserAwsIdAndTypeOrderByAttemptNumberAsc(Fixtures.USER_ID, VerificationAttemptType.FULL))
                 .thenReturn(List.of(manualAttempt(1)));
 
         VerificationReport report = service.review(
@@ -137,7 +138,7 @@ class AdminVerificationServiceTest {
 
     @Test
     void theDecisionKeepsWhoDecidedAndWhy() throws Exception {
-        when(attemptRepository.findByUserAwsIdOrderByAttemptNumberAsc(Fixtures.USER_ID))
+        when(attemptRepository.findByUserAwsIdAndTypeOrderByAttemptNumberAsc(Fixtures.USER_ID, VerificationAttemptType.FULL))
                 .thenReturn(List.of(manualAttempt(1)));
 
         service.review("admin-7", new AdminReviewRequest(Fixtures.USER_ID, false, "expired document"), null);
@@ -172,7 +173,7 @@ class AdminVerificationServiceTest {
     @Test
     void listsTheCasesWaitingForAnAdministrator() {
         when(userRepository.findByVerificationStatusIn(any())).thenReturn(List.of(user));
-        when(attemptRepository.findByUserAwsIdOrderByAttemptNumberAsc(Fixtures.USER_ID))
+        when(attemptRepository.findByUserAwsIdAndTypeOrderByAttemptNumberAsc(Fixtures.USER_ID, VerificationAttemptType.FULL))
                 .thenReturn(List.of(manualAttempt(1), manualAttempt(2)));
 
         List<PendingVerificationResponse> pending = service.pending();
@@ -188,7 +189,7 @@ class AdminVerificationServiceTest {
     @Test
     void aUserWithoutAttemptsIsListedWithoutAScore() {
         when(userRepository.findByVerificationStatusIn(any())).thenReturn(List.of(user));
-        when(attemptRepository.findByUserAwsIdOrderByAttemptNumberAsc(Fixtures.USER_ID)).thenReturn(List.of());
+        when(attemptRepository.findByUserAwsIdAndTypeOrderByAttemptNumberAsc(Fixtures.USER_ID, VerificationAttemptType.FULL)).thenReturn(List.of());
 
         assertThat(service.pending()).singleElement()
                 .satisfies(item -> assertThat(item.lastScore()).isNull());
@@ -196,7 +197,7 @@ class AdminVerificationServiceTest {
 
     private VerificationAttempt manualAttempt(int number) {
         return new VerificationAttempt(
-                user, number, fatum.model.constant.VerificationBand.MANUAL, VerificationOutcome.PENDING,
+                user, VerificationAttemptType.FULL, number, fatum.model.constant.VerificationBand.MANUAL, VerificationOutcome.PENDING,
                 VerificationDecision.SYSTEM, 45d, 40d, 50d, 50d, 50d, "summary", "", null, null, null, null);
     }
 }

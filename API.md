@@ -111,26 +111,56 @@ Desactiva lógicamente la cuenta. Devuelve `204`.
 
 `multipart/form-data` con el campo `image` (JPEG, PNG o WebP).
 
-* Si la cuenta ya está verificada, la imagen se compara con la referencia de liveness; por debajo del
-  umbral responde `409` con `The new profile picture does not match the liveness reference`.
-* Si el análisis no se puede evaluar (Rekognition caído o desactivado) el cambio se acepta y se registra
-  una advertencia.
+* Antes de existir una verificación el cambio es inmediato.
+* Si la cuenta ya está verificada, la imagen **no se publica todavía**: se guarda como `PENDING`, se
+  compara en segundo plano con la referencia de vida y la respuesta llega con `pendingVerification:
+  true`. El cambio nunca queda a revisión de una persona: se acepta o se descarta.
 
 ```json
 {
-  "id": "8f1c…",
-  "originalFilename": "avatar.png",
-  "contentType": "image/png",
-  "size": 20480,
-  "downloadUrl": "https://s3…/avatar.png?X-Amz-Signature=…",
-  "createdAt": "2026-10-01T12:00:00Z",
-  "updatedAt": "2026-10-01T12:00:00Z"
+  "image": {
+    "id": "8f1c…",
+    "originalFilename": "avatar.png",
+    "contentType": "image/png",
+    "size": 20480,
+    "downloadUrl": "https://s3…/avatar.png?X-Amz-Signature=…",
+    "createdAt": "2026-10-01T12:00:00Z",
+    "updatedAt": "2026-10-01T12:00:00Z"
+  },
+  "pendingImage": {
+    "id": "b3d9…",
+    "originalFilename": "nueva.png",
+    "contentType": "image/png",
+    "size": 21330,
+    "downloadUrl": "https://s3…/nueva.png?X-Amz-Signature=…",
+    "createdAt": "2026-10-01T12:30:00Z",
+    "updatedAt": "2026-10-01T12:30:00Z"
+  },
+  "pendingVerification": true,
+  "lastChangeOutcome": "PENDING"
 }
 ```
 
+| Código | Significado |
+| --- | --- |
+| `400` | el archivo no es una imagen |
+| `409` | `The account has no live reference…` (dato inconsistente) |
+| `429` | demasiados cambios encolados en el día |
+| `502` | el servicio de archivos no respondió |
+
 #### `GET /profile-image`
 
-Devuelve el mismo objeto o `404` si el usuario todavía no tiene foto.
+Devuelve el mismo objeto. Es el recurso que el cliente consulta hasta que `pendingVerification` pase a
+`false`; entonces `lastChangeOutcome` dice qué pasó con el último cambio:
+
+| `lastChangeOutcome` | Significado |
+| --- | --- |
+| `PENDING` | la comparación sigue corriendo |
+| `VERIFIED` | la imagen nueva sustituyó a la anterior |
+| `REJECTED` | la imagen nueva se descartó; sigue viéndose la anterior |
+| `null` | el usuario todavía no pidió ningún cambio |
+
+Si el usuario no tiene foto, `image` es `null` (ya no responde `404`).
 
 ### 1.3 Documento de identidad
 
@@ -169,14 +199,62 @@ Consulta el documento vigente o lo elimina junto con sus objetos (`204`).
 
 ### 1.4 Evidencia de vida (liveness)
 
-#### `POST /liveness/upload`
+La prueba de vida la ejecuta la app con `FaceLivenessDetector` de Amplify: la cámara se transmite
+directamente a Rekognition y este servicio solo abre la sesión y recoge el veredicto. **No existe
+endpoint para subir una imagen**: una foto tomada de antemano no prueba quién está frente a la pantalla.
 
-`multipart/form-data` con el campo `image`. Es el frame que se compara después con el documento y con la
-foto de perfil. Volver a subirlo reemplaza el anterior.
+#### `POST /liveness/sessions`
+
+Abre una sesión, o devuelve una que siga viva si el cliente reintentó por un fallo de red. Solo se puede
+llamar cuando `GET /verification/status` responde `livenessRequired: true`, es decir cuando la fase
+gratuita ya pasó el umbral.
+
+```json
+{
+  "sessionId": "3f0a1b…",
+  "expiresAt": "2026-10-01T12:03:00Z",
+  "reused": false
+}
+```
+
+| Código | Significado |
+| --- | --- |
+| `409` | `The proof of life can only be requested after…` |
+| `429` | ya se abrieron demasiadas sesiones para este intento |
+| `503` | la prueba de vida está desactivada o no tiene bucket configurado |
+
+#### `POST /liveness/sessions/{sessionId}/complete`
+
+Pide el veredicto a Rekognition y, si ya hay decisión, cierra el intento. Es idempotente: reportar la
+misma sesión dos veces devuelve la decisión registrada en lugar de volver a decidir.
+
+```json
+{
+  "sessionId": "3f0a1b…",
+  "status": "SUCCEEDED",
+  "confidence": 96.4,
+  "identityVerified": true,
+  "userStatus": "VERIFIED",
+  "outcome": "VERIFIED",
+  "referenceDocumentMatch": 92.1,
+  "flags": [],
+  "summary": "Proof of life with confidence 96.40; the live reference matches the document (92.10)"
+}
+```
+
+| `status` | Efecto |
+| --- | --- |
+| `SUCCEEDED` | se verifica solo si la referencia devuelta coincide con el documento |
+| `FAILED` / `EXPIRED` | `MANUAL_REVIEW`, sin segundo intento |
+| `PENDING` | Rekognition todavía procesa; el intento sigue abierto |
+
+Un fallo técnico de Rekognition (`UNAVAILABLE`) responde `503` y **deja el intento abierto**, para que el
+cliente pueda reportar la sesión otra vez.
 
 #### `GET /liveness`
 
-Devuelve el frame almacenado o `404`.
+Devuelve la imagen de referencia de la cuenta (la que produjo Rekognition o, en una revisión manual, la
+que adoptó un administrador) o `404` si todavía no existe.
 
 ### 1.5 Verificación
 
@@ -187,23 +265,26 @@ Devuelve el frame almacenado o `404`.
   "status": "UNVERIFIED",
   "attemptsUsed": 1,
   "attemptsRemaining": 2,
-  "canAttempt": true,
+  "canAttempt": false,
   "documentUploaded": true,
-  "livenessUploaded": true,
+  "livenessCompleted": false,
   "profileImageUploaded": true,
+  "livenessRequired": true,
   "lastAttempt": {
     "id": "9a8b…",
+    "type": "FULL",
     "attemptNumber": 1,
-    "band": "MANUAL",
-    "outcome": "PENDING",
+    "band": "VERIFIED",
+    "outcome": "AWAITING_LIVENESS",
     "decision": "SYSTEM",
-    "score": 46.5,
-    "documentMatch": 40.0,
-    "documentLivenessMatch": 50.0,
-    "profileLivenessMatch": 50.0,
-    "fraudRisk": 50.0,
-    "summary": "Attempt 1/3 score 46.50 | …",
-    "flags": ["mismatch:fullName"],
+    "score": 91.2,
+    "documentMatch": 100.0,
+    "documentProfileMatch": 95.0,
+    "referenceDocumentMatch": 0.0,
+    "livenessConfidence": null,
+    "fraudRisk": 5.0,
+    "summary": "Attempt 1/3 score 91.20 | …",
+    "flags": [],
     "decidedBy": null,
     "notes": null,
     "createdAt": "2026-10-01T12:00:00Z"
@@ -211,9 +292,13 @@ Devuelve el frame almacenado o `404`.
 }
 ```
 
+`livenessRequired` es lo que decide si la app debe abrir el componente de Face Liveness, y solo es `true`
+después de que la fase gratuita pasó. Mientras lo sea, `canAttempt` es `false`.
+
 #### `POST /verification/submit`
 
-Ejecuta un intento con la evidencia ya subida.
+Ejecuta la **fase gratuita** con la evidencia ya subida. Si el resultado pasa el umbral, el intento queda
+`AWAITING_LIVENESS` y hay que abrir una prueba de vida.
 
 ```json
 {
@@ -223,12 +308,14 @@ Ejecuta un intento con la evidencia ya subida.
   "attemptsRemaining": 1,
   "score": 91.2,
   "documentMatch": 100.0,
-  "documentLivenessMatch": 95.0,
-  "profileLivenessMatch": 90.0,
+  "documentProfileMatch": 95.0,
+  "referenceDocumentMatch": 0.0,
+  "livenessConfidence": null,
   "fraudRisk": 5.0,
   "band": "VERIFIED",
-  "outcome": "VERIFIED",
-  "userStatus": "VERIFIED",
+  "outcome": "AWAITING_LIVENESS",
+  "userStatus": "UNVERIFIED",
+  "needsLiveness": true,
   "flags": [],
   "summary": "Attempt 2/3 score 91.20 | …",
   "decidedAt": "2026-10-01T12:00:00Z"
@@ -237,7 +324,7 @@ Ejecuta un intento con la evidencia ya subida.
 
 | Código | Significado |
 | --- | --- |
-| `400` | falta evidencia (`Liveness evidence, profile picture and identity document are required…`) |
+| `400` | falta evidencia (`A profile picture and an identity document are required…`) |
 | `409` | la cuenta ya está verificada o no quedan intentos |
 | `502` | un servicio de AWS o el servicio de archivos no respondió |
 

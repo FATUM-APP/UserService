@@ -1,36 +1,48 @@
 package fatum.service;
 
+import fatum.dto.ProfileImageResponse;
 import fatum.dto.StoredFileResponse;
 import fatum.exception.FatumUserException;
 import fatum.model.LivenessFile;
 import fatum.model.ProfileImage;
 import fatum.model.User;
+import fatum.model.VerificationAttempt;
+import fatum.model.constant.ProfileImageStatus;
+import fatum.model.constant.VerificationAttemptType;
+import fatum.model.constant.VerificationBand;
+import fatum.model.constant.VerificationDecision;
+import fatum.model.constant.VerificationOutcome;
+import fatum.model.constant.VerificationStatus;
 import fatum.repository.LivenessFileRepository;
 import fatum.repository.ProfileImageRepository;
 import fatum.repository.UserRepository;
+import fatum.repository.VerificationAttemptRepository;
 import fatum.storage.FileStorageClient;
 import fatum.storage.FileStorageProperties;
 import fatum.storage.StorageException;
 import fatum.storage.StoredFile;
-import fatum.verification.FileContentFetcher;
+import fatum.verification.ProfileImageChangedEvent;
 import fatum.verification.VerificationProperties;
-import fatum.verification.analyzer.FaceComparator;
-import fatum.verification.analyzer.FaceMatch;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
+
 /**
  * Profile picture of a user.
  *
- * <p>Once the identity has been verified, the profile picture becomes a security surface: it is the
- * picture other users see, so it must keep showing the same person. A change is therefore accepted only
- * when the new picture still matches the liveness reference, which is the only evidence kept after a
- * successful verification. Before any verification exists there is nothing to compare with, so the
- * change is free.</p>
+ * <p>Before an identity is verified there is nothing to compare a picture with, so a change is applied
+ * straight away. Once the identity is verified the picture becomes a security surface: it is the face
+ * other users see, and it must keep being the same person as the live reference. A change then never
+ * goes to a human, it is simply accepted or refused by the face comparator, and it is refused until
+ * the comparison says otherwise.</p>
  */
 @Service
 public class ProfileImageService {
@@ -40,86 +52,76 @@ public class ProfileImageService {
     private final UserRepository userRepository;
     private final ProfileImageRepository profileImageRepository;
     private final LivenessFileRepository livenessFileRepository;
+    private final VerificationAttemptRepository attemptRepository;
     private final FileStorageClient fileStorageClient;
     private final FileStorageProperties storageProperties;
-    private final FileContentFetcher fileContentFetcher;
-    private final FaceComparator faceComparator;
     private final VerificationProperties verificationProperties;
+    private final ApplicationEventPublisher eventPublisher;
 
     public ProfileImageService(
             UserRepository userRepository,
             ProfileImageRepository profileImageRepository,
             LivenessFileRepository livenessFileRepository,
+            VerificationAttemptRepository attemptRepository,
             FileStorageClient fileStorageClient,
             FileStorageProperties storageProperties,
-            FileContentFetcher fileContentFetcher,
-            FaceComparator faceComparator,
-            VerificationProperties verificationProperties) {
+            VerificationProperties verificationProperties,
+            ApplicationEventPublisher eventPublisher) {
         this.userRepository = userRepository;
         this.profileImageRepository = profileImageRepository;
         this.livenessFileRepository = livenessFileRepository;
+        this.attemptRepository = attemptRepository;
         this.fileStorageClient = fileStorageClient;
         this.storageProperties = storageProperties;
-        this.fileContentFetcher = fileContentFetcher;
-        this.faceComparator = faceComparator;
         this.verificationProperties = verificationProperties;
-    }
-
-    @Transactional
-    public StoredFileResponse replace(String awsId, MultipartFile file) throws FatumUserException {
-        User user = getActiveUser(awsId);
-        validateImage(file);
-        ProfileImage current = profileImageRepository.findByUserAwsId(awsId).orElse(null);
-        String previousKey = current == null ? null : current.getImageKey();
-
-        requireSamePersonAsLiveness(awsId, file);
-
-        StoredFile uploaded = fileStorageClient.upload(file, storageProperties.getProfileImageRoute());
-        try {
-            ProfileImage image = current;
-            if (image == null) {
-                image = new ProfileImage(
-                        uploaded.key(),
-                        uploaded.originalFilename(),
-                        uploaded.contentType(),
-                        uploaded.size(),
-                        user);
-            } else {
-                image.replace(
-                        uploaded.key(),
-                        uploaded.originalFilename(),
-                        uploaded.contentType(),
-                        uploaded.size());
-            }
-            ProfileImage saved = profileImageRepository.save(image);
-            if (previousKey != null && !previousKey.equals(uploaded.key())) {
-                deleteQuietly(previousKey);
-            }
-            return toResponse(saved);
-        } catch (RuntimeException exception) {
-            deleteQuietly(uploaded.key());
-            throw exception;
-        }
-    }
-
-    public StoredFileResponse get(String awsId) throws FatumUserException {
-        getActiveUser(awsId);
-        ProfileImage image = profileImageRepository.findByUserAwsId(awsId)
-                .orElseThrow(() -> new FatumUserException(FatumUserException.FILE_NOT_FOUND));
-        return toResponse(image);
+        this.eventPublisher = eventPublisher;
     }
 
     /**
-     * Sets an already stored object as the profile picture, without the liveness comparison.
+     * Uploads a new profile picture.
+     *
+     * <p>For a verified account the picture is not published yet: it is queued and the comparison runs
+     * in the background, which is why the response says {@code pendingVerification}.</p>
+     */
+    @Transactional
+    public ProfileImageResponse replace(String awsId, MultipartFile file) throws FatumUserException {
+        User user = getActiveUser(awsId);
+        validateImage(file);
+        ProfileImage active = profileImageRepository.findActive(user.getAwsId()).orElse(null);
+        if (user.getVerificationStatus() != VerificationStatus.VERIFIED) {
+            return applyDirectly(user, active, file);
+        }
+        return queueForComparison(user, active, file);
+    }
+
+    public ProfileImageResponse get(String awsId) throws FatumUserException {
+        User user = getActiveUser(awsId);
+        return current(user.getAwsId());
+    }
+
+    /** The published picture, or null when the account has none. Used by the user mapper. */
+    public StoredFileResponse find(String awsId) {
+        return profileImageRepository.findActive(awsId).map(this::toResponse).orElse(null);
+    }
+
+    /**
+     * Sets an already stored object as the profile picture, without any comparison.
      *
      * <p>Only used when an administrator verifies an identity manually and uploads the trusted picture
-     * themselves.</p>
+     * themselves. Any picture the user had queued is dropped.</p>
      */
     @Transactional
     public ProfileImage adoptAsProfilePicture(User user, StoredFile storedFile) {
-        ProfileImage current = profileImageRepository.findByUserAwsId(user.getAwsId()).orElse(null);
-        String previousKey = current == null ? null : current.getImageKey();
-        ProfileImage image = current;
+        String awsId = user.getAwsId();
+        ProfileImage pending = profileImageRepository.findPending(awsId).orElse(null);
+        if (pending != null) {
+            String pendingKey = pending.getImageKey();
+            profileImageRepository.delete(pending);
+            deleteQuietly(pendingKey);
+        }
+        ProfileImage active = profileImageRepository.findActive(awsId).orElse(null);
+        String previousKey = active == null ? null : active.getImageKey();
+        ProfileImage image = active;
         if (image == null) {
             image = new ProfileImage(
                     storedFile.key(),
@@ -141,36 +143,152 @@ public class ProfileImageService {
         return saved;
     }
 
-    public StoredFileResponse find(String awsId) {
-        return profileImageRepository.findByUserAwsId(awsId)
-                .map(this::toResponse)
+    /** Removes every picture of a user, used by the retention policy when a retry starts over. */
+    @Transactional
+    public void forget(String awsId) {
+        List<ProfileImage> images = List.copyOf(profileImageRepository.findAllByUserAwsId(awsId));
+        profileImageRepository.deleteAll(images);
+    }
+
+    private ProfileImageResponse current(String awsId) {
+        ProfileImage active = profileImageRepository.findActive(awsId).orElse(null);
+        ProfileImage pending = profileImageRepository.findPending(awsId).orElse(null);
+        return new ProfileImageResponse(
+                active == null ? null : toResponse(active),
+                pending == null ? null : toResponse(pending),
+                pending != null,
+                lastChangeOutcome(awsId));
+    }
+
+    private VerificationOutcome lastChangeOutcome(String awsId) {
+        return attemptRepository.findByUserAwsIdAndTypeOrderByAttemptNumberDesc(awsId, VerificationAttemptType.FACE_ONLY)
+                .stream()
+                .findFirst()
+                .map(VerificationAttempt::getOutcome)
                 .orElse(null);
     }
 
+    /** No verification exists yet, so there is nothing to compare the picture with. */
+    private ProfileImageResponse applyDirectly(User user, ProfileImage active, MultipartFile file) throws FatumUserException {
+        String previousKey = active == null ? null : active.getImageKey();
+        StoredFile uploaded = fileStorageClient.upload(file, storageProperties.getProfileImageRoute());
+        try {
+            ProfileImage image = active;
+            if (image == null) {
+                image = new ProfileImage(
+                        uploaded.key(),
+                        uploaded.originalFilename(),
+                        uploaded.contentType(),
+                        uploaded.size(),
+                        user);
+            } else {
+                image.replace(
+                        uploaded.key(),
+                        uploaded.originalFilename(),
+                        uploaded.contentType(),
+                        uploaded.size());
+            }
+            ProfileImage saved = profileImageRepository.save(image);
+            if (previousKey != null && !previousKey.equals(uploaded.key())) {
+                deleteQuietly(previousKey);
+            }
+            return new ProfileImageResponse(toResponse(saved), null, false, lastChangeOutcome(user.getAwsId()));
+        } catch (RuntimeException exception) {
+            deleteQuietly(uploaded.key());
+            throw exception;
+        }
+    }
+
     /**
-     * Accepts the change only when the new picture still shows the person of the liveness reference.
+     * Queues the picture of a verified account and asks for the comparison.
      *
-     * <p>When the comparison cannot be evaluated (Rekognition disabled or unavailable) the change is
-     * allowed and a warning is logged: blocking every profile update during an AWS incident would be
-     * worse than accepting a picture that a later verification can review.</p>
+     * <p>The row is written before the comparison runs, so the event handler finds it. Nothing is
+     * published until the comparison says the picture is the same person.</p>
      */
-    private void requireSamePersonAsLiveness(String awsId, MultipartFile file) throws FatumUserException {
-        LivenessFile liveness = livenessFileRepository.findByUserAwsId(awsId).orElse(null);
-        if (liveness == null) {
-            return;
+    private ProfileImageResponse queueForComparison(User user, ProfileImage active, MultipartFile file)
+            throws FatumUserException {
+        String awsId = user.getAwsId();
+        LivenessFile reference = livenessFileRepository.findByUserAwsId(awsId).orElse(null);
+        if (reference == null) {
+            // A verified account with no live reference is broken data. Publishing the picture would
+            // leave the account showing any face, so the change is refused until the data is fixed.
+            log.error("The verified user {} has no live reference; the picture change was refused", awsId);
+            throw new FatumUserException(FatumUserException.PROFILE_REFERENCE_MISSING);
         }
-        byte[] candidate = read(file);
-        byte[] reference = fileContentFetcher.fetch(
-                storageProperties.getLivenessRoute(),
-                liveness.getLivenessKey());
-        FaceMatch match = faceComparator.compare(reference, candidate);
-        if (!match.evaluated()) {
-            log.warn("The new profile picture of {} could not be compared with the liveness reference: {}",
-                    awsId, match.detail());
-            return;
+        requireChangesLeftToday(awsId);
+
+        ProfileImage previousPending = profileImageRepository.findPending(awsId).orElse(null);
+        String previousPendingKey = previousPending == null ? null : previousPending.getImageKey();
+        StoredFile uploaded = fileStorageClient.upload(file, storageProperties.getProfileImageRoute());
+        try {
+            ProfileImage pending = previousPending;
+            if (pending == null) {
+                pending = new ProfileImage(
+                        uploaded.key(),
+                        uploaded.originalFilename(),
+                        uploaded.contentType(),
+                        uploaded.size(),
+                        user,
+                        ProfileImageStatus.PENDING);
+            } else {
+                pending.replace(
+                        uploaded.key(),
+                        uploaded.originalFilename(),
+                        uploaded.contentType(),
+                        uploaded.size());
+            }
+            ProfileImage saved = profileImageRepository.save(pending);
+            if (previousPendingKey != null && !previousPendingKey.equals(uploaded.key())) {
+                deleteQuietly(previousPendingKey);
+            }
+            openAttempt(user, uploaded.key());
+            eventPublisher.publishEvent(new ProfileImageChangedEvent(awsId, saved.getId()));
+            log.info("The profile picture of {} was queued for comparison", awsId);
+            return new ProfileImageResponse(
+                    active == null ? null : toResponse(active),
+                    toResponse(saved),
+                    true,
+                    VerificationOutcome.PENDING);
+        } catch (RuntimeException exception) {
+            deleteQuietly(uploaded.key());
+            throw exception;
         }
-        if (match.similarity() < verificationProperties.getProfilePhotoChangeThreshold()) {
-            throw new FatumUserException(FatumUserException.PROFILE_PHOTO_MISMATCH);
+    }
+
+    /** One row per queued picture, so the history says what was asked and how it ended. */
+    private void openAttempt(User user, String imageKey) {
+        int attemptNumber = (int) attemptRepository.countByUserAwsIdAndType(
+                user.getAwsId(),
+                VerificationAttemptType.FACE_ONLY) + 1;
+        VerificationAttempt attempt = new VerificationAttempt(
+                user,
+                VerificationAttemptType.FACE_ONLY,
+                attemptNumber,
+                VerificationBand.MANUAL,
+                VerificationOutcome.PENDING,
+                VerificationDecision.SYSTEM,
+                0d,
+                0d,
+                0d,
+                0d,
+                0d,
+                "Profile picture change queued for comparison with the live reference",
+                "profile-photo-change",
+                null,
+                null,
+                null,
+                imageKey);
+        attemptRepository.save(attempt);
+    }
+
+    private void requireChangesLeftToday(String awsId) throws FatumUserException {
+        Instant since = Instant.now().minus(Duration.ofDays(1));
+        long queued = attemptRepository.countByUserAwsIdAndTypeAndCreatedAtAfter(
+                awsId,
+                VerificationAttemptType.FACE_ONLY,
+                since);
+        if (queued >= verificationProperties.getMaxPendingPhotoChangesPerDay()) {
+            throw new FatumUserException(FatumUserException.PROFILE_PHOTO_TOO_MANY_CHANGES);
         }
     }
 
@@ -229,14 +347,6 @@ public class ProfileImageService {
         String contentType = file.getContentType();
         if (contentType == null || !contentType.toLowerCase().startsWith("image/")) {
             throw new FatumUserException(FatumUserException.INVALID_IMAGE_TYPE);
-        }
-    }
-
-    private byte[] read(MultipartFile file) throws FatumUserException {
-        try {
-            return file.getBytes();
-        } catch (java.io.IOException exception) {
-            throw new FatumUserException(FatumUserException.INVALID_IMAGE);
         }
     }
 }

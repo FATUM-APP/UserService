@@ -12,6 +12,11 @@ public enum StorageEventReason {
     VERIFIED,
     /** Manual band with retries left: every piece of evidence is wiped so the user starts over. */
     MANUAL_RETRY_RESET,
+    /**
+     * The document and the picture passed the free checks and the proof of life is still to come, so
+     * everything is kept until Rekognition answers.
+     */
+    LIVENESS_PENDING,
     /** The case goes to an administrator: the document is kept, the liveness and picture are wiped. */
     ADMIN_REVIEW_REQUIRED,
     /** An administrator confirmed the identity: the evidence is kept for the record. */

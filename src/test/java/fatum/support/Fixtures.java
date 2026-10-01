@@ -6,6 +6,8 @@ import fatum.model.ProfileImage;
 import fatum.model.User;
 import fatum.model.constant.DocumentType;
 import fatum.model.constant.Gender;
+import fatum.model.constant.ProfileImageStatus;
+import fatum.model.constant.ReferenceSource;
 import org.springframework.mock.web.MockMultipartFile;
 
 import java.time.LocalDate;
@@ -85,8 +87,18 @@ public final class Fixtures {
         return liveness(user, "liveness/2026/10/01/frame.png");
     }
 
+    /** Reference adopted by an administrator: it lives in the ordinary liveness route. */
     public static LivenessFile liveness(User user, String key) {
-        return new LivenessFile(key, "frame.png", "image/png", 512L, user);
+        return new LivenessFile(key, "frame.png", "image/png", 512L, ReferenceSource.ADMIN, null, user);
+    }
+
+    /** Reference produced by Rekognition: it lives in its own bucket, written under the session. */
+    public static LivenessFile rekognitionReference(User user) {
+        return rekognitionReference(user, "fatum-liveness", "liveness/session-1/reference.jpg");
+    }
+
+    public static LivenessFile rekognitionReference(User user, String bucket, String key) {
+        return new LivenessFile(key, "reference.jpg", "image/jpeg", 0L, ReferenceSource.REKOGNITION, bucket, user);
     }
 
     public static ProfileImage profileImage(User user) {
@@ -95,6 +107,11 @@ public final class Fixtures {
 
     public static ProfileImage profileImage(User user, String key) {
         return new ProfileImage(key, "avatar.png", "image/png", 256L, user);
+    }
+
+    /** A picture of a verified account that is still being compared with the live reference. */
+    public static ProfileImage pendingProfileImage(User user, String key) {
+        return new ProfileImage(key, "avatar.png", "image/png", 256L, user, ProfileImageStatus.PENDING);
     }
 
     public static MockMultipartFile image(String filename) {

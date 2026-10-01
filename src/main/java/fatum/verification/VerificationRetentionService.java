@@ -4,6 +4,7 @@ import fatum.model.DocumentFile;
 import fatum.model.LivenessFile;
 import fatum.model.ProfileImage;
 import fatum.model.StorageEvent;
+import fatum.model.constant.ReferenceSource;
 import fatum.model.constant.StorageEventAction;
 import fatum.model.constant.StorageEventReason;
 import fatum.model.constant.StoredFileType;
@@ -20,14 +21,17 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
  * Applies the retention policy to the evidence of a verification.
  *
  * <p>The business rule is simple to state: the service keeps only what it still needs. A verified
- * identity no longer needs the document; a case that goes to an administrator needs the document but
- * not the pictures the administrator is going to replace; a retry needs nothing at all.</p>
+ * identity no longer needs the document; a case that goes to an administrator needs the document and
+ * the live reference, because that is the evidence of what happened; a retry needs nothing at all; and
+ * a case that is waiting for the proof of life needs everything, because that is exactly what the
+ * proof is about to use.</p>
  *
  * <p>Every action is written to {@code storage_events}, which is what allows answering later why an
  * object is no longer in the bucket. A failed object deletion never aborts the verification: it is
@@ -65,8 +69,9 @@ public class VerificationRetentionService {
     public void apply(VerificationOutcome outcome, String userAwsId) {
         switch (outcome) {
             case PENDING -> wipeEverythingForRetry(userAwsId);
+            case AWAITING_LIVENESS -> keepEverythingForLiveness(userAwsId);
             case VERIFIED -> keepOnlyLivenessAndProfile(userAwsId);
-            case REJECTED, MANUAL_REVIEW -> keepOnlyDocument(userAwsId);
+            case REJECTED, MANUAL_REVIEW -> keepOnlyEvidence(userAwsId);
         }
     }
 
@@ -74,23 +79,61 @@ public class VerificationRetentionService {
     public void wipeEverythingForRetry(String userAwsId) {
         deleteDocument(userAwsId, StorageEventReason.MANUAL_RETRY_RESET);
         deleteLiveness(userAwsId, StorageEventReason.MANUAL_RETRY_RESET);
-        deleteProfileImage(userAwsId, StorageEventReason.MANUAL_RETRY_RESET);
+        deleteProfileImages(userAwsId, StorageEventReason.MANUAL_RETRY_RESET);
     }
 
-    /** Identity confirmed: the document goes away, the profile picture and the liveness stay. */
+    /**
+     * The proof of life is about to run, so the document and the picture it has to be compared with
+     * must stay exactly where they are.
+     */
+    public void keepEverythingForLiveness(String userAwsId) {
+        documentFileRepository.findByUserAwsId(userAwsId).ifPresent(document -> {
+            recordKept(userAwsId, StoredFileType.DOCUMENT_FRONT, document.getFrontKey(),
+                    StorageEventReason.LIVENESS_PENDING, "The document is needed to check the proof of life");
+            if (document.hasBackSide()) {
+                recordKept(userAwsId, StoredFileType.DOCUMENT_BACK, document.getBackKey(),
+                        StorageEventReason.LIVENESS_PENDING, "The document is needed to check the proof of life");
+            }
+        });
+        profileImageRepository.findActive(userAwsId).ifPresent(image -> recordKept(
+                userAwsId,
+                StoredFileType.PROFILE_IMAGE,
+                image.getImageKey(),
+                StorageEventReason.LIVENESS_PENDING,
+                "The picture is needed to check the proof of life"));
+    }
+
+    /** Identity confirmed: the document goes away, the reference and the profile picture stay. */
     public void keepOnlyLivenessAndProfile(String userAwsId) {
         deleteDocument(userAwsId, StorageEventReason.VERIFIED);
     }
 
-    /** Case escalated: the document is the evidence the administrator needs, the pictures are not. */
-    public void keepOnlyDocument(String userAwsId) {
-        deleteLiveness(userAwsId, StorageEventReason.ADMIN_REVIEW_REQUIRED);
-        deleteProfileImage(userAwsId, StorageEventReason.ADMIN_REVIEW_REQUIRED);
+    /**
+     * Case escalated: the document is the evidence the administrator needs, and so is the reference
+     * Rekognition produced, because it shows who was really in front of the camera.
+     */
+    public void keepOnlyEvidence(String userAwsId) {
+        keepRekognitionReference(userAwsId);
+        deleteProfileImages(userAwsId, StorageEventReason.ADMIN_REVIEW_REQUIRED);
     }
 
     /** Records that a piece of evidence was deliberately kept. */
     public void recordKept(String userAwsId, StoredFileType fileType, String objectKey, StorageEventReason reason, String detail) {
         save(userAwsId, fileType, objectKey, StorageEventAction.RETAINED, reason, detail);
+    }
+
+    private void keepRekognitionReference(String userAwsId) {
+        Optional<LivenessFile> reference = livenessFileRepository.findByUserAwsId(userAwsId);
+        if (reference.isEmpty()) {
+            return;
+        }
+        if (reference.get().getSource() == ReferenceSource.REKOGNITION) {
+            recordKept(userAwsId, StoredFileType.LIVENESS, reference.get().getLivenessKey(),
+                    StorageEventReason.ADMIN_REVIEW_REQUIRED,
+                    "The picture Rekognition produced during the proof of life");
+            return;
+        }
+        deleteLiveness(userAwsId, StorageEventReason.ADMIN_REVIEW_REQUIRED);
     }
 
     private void deleteDocument(String userAwsId, StorageEventReason reason) {
@@ -121,19 +164,18 @@ public class VerificationRetentionService {
         livenessFileRepository.delete(file);
     }
 
-    private void deleteProfileImage(String userAwsId, StorageEventReason reason) {
-        Optional<ProfileImage> image = profileImageRepository.findByUserAwsId(userAwsId);
-        if (image.isEmpty()) {
-            return;
+    /** A verified account can hold two rows at once, and both of them have to go. */
+    private void deleteProfileImages(String userAwsId, StorageEventReason reason) {
+        List<ProfileImage> images = List.copyOf(profileImageRepository.findAllByUserAwsId(userAwsId));
+        for (ProfileImage image : images) {
+            if (isStillReferenced(userAwsId, image.getImageKey(), StoredFileType.PROFILE_IMAGE)) {
+                recordKept(userAwsId, StoredFileType.PROFILE_IMAGE, image.getImageKey(), reason,
+                        "The object is still used as the liveness reference");
+            } else {
+                deleteObject(userAwsId, StoredFileType.PROFILE_IMAGE, storageProperties.getProfileImageRoute(), image.getImageKey(), reason);
+            }
         }
-        ProfileImage file = image.get();
-        if (isStillReferenced(userAwsId, file.getImageKey(), StoredFileType.PROFILE_IMAGE)) {
-            recordKept(userAwsId, StoredFileType.PROFILE_IMAGE, file.getImageKey(), reason,
-                    "The object is still used as the liveness reference");
-        } else {
-            deleteObject(userAwsId, StoredFileType.PROFILE_IMAGE, storageProperties.getProfileImageRoute(), file.getImageKey(), reason);
-        }
-        profileImageRepository.delete(file);
+        profileImageRepository.deleteAll(images);
     }
 
     /**
@@ -145,9 +187,8 @@ public class VerificationRetentionService {
             return false;
         }
         if (deleting != StoredFileType.PROFILE_IMAGE) {
-            boolean usedByProfile = profileImageRepository.findByUserAwsId(userAwsId)
-                    .map(image -> objectKey.equals(image.getImageKey()))
-                    .orElse(false);
+            boolean usedByProfile = profileImageRepository.findAllByUserAwsId(userAwsId).stream()
+                    .anyMatch(image -> objectKey.equals(image.getImageKey()));
             if (usedByProfile) {
                 return true;
             }

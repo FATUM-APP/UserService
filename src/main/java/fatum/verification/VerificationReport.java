@@ -12,6 +12,10 @@ import java.util.List;
  *
  * <p>Every partial score is exposed on purpose: a user who scores 45% deserves to know whether the
  * document did not match, whether the face did not match or whether the picture was simply unreadable.</p>
+ *
+ * <p>The report is produced twice for a successful first phase: once to say that the proof of life is
+ * required, and once when Rekognition answers. Only the second one can carry
+ * {@link VerificationOutcome#VERIFIED}.</p>
  */
 public record VerificationReport(
         String userAwsId,
@@ -20,8 +24,9 @@ public record VerificationReport(
         int attemptsRemaining,
         double score,
         double documentMatch,
-        double documentLivenessMatch,
-        double profileLivenessMatch,
+        double documentProfileMatch,
+        double referenceDocumentMatch,
+        Double livenessConfidence,
         double fraudRisk,
         VerificationBand band,
         VerificationOutcome outcome,
@@ -33,5 +38,10 @@ public record VerificationReport(
 
     public VerificationReport {
         flags = flags == null ? List.of() : List.copyOf(flags);
+    }
+
+    /** True when the client has to run the proof of life before the case can be decided. */
+    public boolean needsLiveness() {
+        return outcome == VerificationOutcome.AWAITING_LIVENESS;
     }
 }

@@ -4,6 +4,7 @@ import fatum.dto.StoredFileResponse;
 import fatum.exception.FatumUserException;
 import fatum.model.LivenessFile;
 import fatum.model.User;
+import fatum.model.constant.ReferenceSource;
 import fatum.repository.LivenessFileRepository;
 import fatum.repository.UserRepository;
 import fatum.storage.FileStorageClient;
@@ -15,14 +16,16 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
-import org.springframework.web.multipart.MultipartFile;
+
+import java.util.Optional;
 
 /**
- * Liveness evidence of a user.
+ * The trusted picture of a user, called the liveness reference.
  *
- * <p>The frame is the reference picture of the account: it is compared with the picture on the identity
- * document and with the profile picture. It is uploaded before the verification is submitted and can be
- * replaced by uploading a new one.</p>
+ * <p>It is the image every later comparison uses: the identity document is compared with it while
+ * verifying, and a new profile picture is compared with it before it is accepted. It cannot be
+ * uploaded by hand: only Rekognition can produce it, while running a proof of life, or an
+ * administrator while reviewing a case.</p>
  */
 @Service
 public class LivenessService {
@@ -45,24 +48,8 @@ public class LivenessService {
         this.storageProperties = storageProperties;
     }
 
-    @Transactional
-    public StoredFileResponse upload(String awsId, MultipartFile file) throws FatumUserException {
-        User user = getActiveUser(awsId);
-        validateImage(file);
-        LivenessFile current = livenessFileRepository.findByUserAwsId(awsId).orElse(null);
-        String previousKey = current == null ? null : current.getLivenessKey();
-
-        StoredFile uploaded = fileStorageClient.upload(file, storageProperties.getLivenessRoute());
-        try {
-            LivenessFile saved = adoptAsReference(user, uploaded, current);
-            if (previousKey != null && !previousKey.equals(uploaded.key())) {
-                deleteQuietly(previousKey);
-            }
-            return toResponse(saved);
-        } catch (RuntimeException exception) {
-            deleteQuietly(uploaded.key());
-            throw exception;
-        }
+    public Optional<LivenessFile> reference(String awsId) {
+        return livenessFileRepository.findByUserAwsId(awsId);
     }
 
     public StoredFileResponse get(String awsId) throws FatumUserException {
@@ -73,34 +60,65 @@ public class LivenessService {
     }
 
     /**
-     * Points the liveness reference at an object that is already stored.
+     * Points the reference at the picture Rekognition produced while running the proof of life.
+     *
+     * <p>The object is written by Rekognition straight into the liveness bucket, so the bucket is kept
+     * with the key: the face comparator reads it from S3 instead of downloading it.</p>
+     */
+    @Transactional
+    public LivenessFile adoptRekognitionReference(User user, String bucket, String objectKey) {
+        LivenessFile current = livenessFileRepository.findByUserAwsId(user.getAwsId()).orElse(null);
+        LivenessFile reference = current;
+        if (reference == null) {
+            reference = new LivenessFile(
+                    objectKey,
+                    fileNameOf(objectKey),
+                    "image/jpeg",
+                    0L,
+                    ReferenceSource.REKOGNITION,
+                    bucket,
+                    user);
+        } else {
+            reference.replace(
+                    objectKey,
+                    fileNameOf(objectKey),
+                    "image/jpeg",
+                    0L,
+                    ReferenceSource.REKOGNITION,
+                    bucket);
+        }
+        return livenessFileRepository.save(reference);
+    }
+
+    /**
+     * Points the reference at an object that is already stored.
      *
      * <p>Used when an administrator verifies an identity manually: the picture they upload becomes both
-     * the profile picture and the liveness reference, so the account keeps a single trusted image.</p>
+     * the profile picture and the reference, so the account keeps a single trusted image.</p>
      */
     @Transactional
     public LivenessFile adoptAsReference(User user, StoredFile storedFile) {
         LivenessFile current = livenessFileRepository.findByUserAwsId(user.getAwsId()).orElse(null);
-        return adoptAsReference(user, storedFile, current);
-    }
-
-    private LivenessFile adoptAsReference(User user, StoredFile storedFile, LivenessFile current) {
-        LivenessFile liveness = current;
-        if (liveness == null) {
-            liveness = new LivenessFile(
+        LivenessFile reference = current;
+        if (reference == null) {
+            reference = new LivenessFile(
                     storedFile.key(),
                     storedFile.originalFilename(),
                     storedFile.contentType(),
                     storedFile.size(),
+                    ReferenceSource.ADMIN,
+                    null,
                     user);
         } else {
-            liveness.replace(
+            reference.replace(
                     storedFile.key(),
                     storedFile.originalFilename(),
                     storedFile.contentType(),
-                    storedFile.size());
+                    storedFile.size(),
+                    ReferenceSource.ADMIN,
+                    null);
         }
-        return livenessFileRepository.save(liveness);
+        return livenessFileRepository.save(reference);
     }
 
     private StoredFileResponse toResponse(LivenessFile liveness) {
@@ -126,15 +144,12 @@ public class LivenessService {
         }
     }
 
-    private void deleteQuietly(String objectKey) {
+    private String fileNameOf(String objectKey) {
         if (!StringUtils.hasText(objectKey)) {
-            return;
+            return "reference.jpg";
         }
-        try {
-            fileStorageClient.delete(storageProperties.getLivenessRoute(), objectKey);
-        } catch (StorageException exception) {
-            log.warn("The object {} could not be deleted from the liveness route", objectKey, exception);
-        }
+        int lastSlash = objectKey.lastIndexOf('/');
+        return lastSlash < 0 ? objectKey : objectKey.substring(lastSlash + 1);
     }
 
     private User getActiveUser(String awsId) throws FatumUserException {
@@ -146,18 +161,5 @@ public class LivenessService {
             throw new FatumUserException(FatumUserException.USER_NOT_FOUND);
         }
         return user;
-    }
-
-    private void validateImage(MultipartFile file) throws FatumUserException {
-        if (file == null || file.isEmpty()) {
-            throw new FatumUserException(FatumUserException.INVALID_LIVENESS);
-        }
-        if (!StringUtils.hasText(file.getOriginalFilename())) {
-            throw new FatumUserException(FatumUserException.INVALID_LIVENESS);
-        }
-        String contentType = file.getContentType();
-        if (contentType == null || !contentType.toLowerCase().startsWith("image/")) {
-            throw new FatumUserException(FatumUserException.INVALID_LIVENESS_TYPE);
-        }
     }
 }
