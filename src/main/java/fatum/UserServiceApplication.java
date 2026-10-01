@@ -2,6 +2,7 @@ package fatum;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 
 import java.util.Collections;
 
@@ -10,6 +11,7 @@ import java.util.Collections;
  * Designed to run locally or as a containerized service on Google Cloud Run.
  */
 @SpringBootApplication
+@ConfigurationPropertiesScan
 public class UserServiceApplication {
 
     public static void main(String[] args) {

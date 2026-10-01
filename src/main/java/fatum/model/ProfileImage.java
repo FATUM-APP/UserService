@@ -29,7 +29,7 @@ public class ProfileImage {
     @Column(name = "ID", length = 36)
     private String id;
 
-    @Column(name = "IMAGE_KEY", nullable = false, length = 255)
+    @Column(name = "IMAGE_KEY", nullable = false, length = 512)
     private String imageKey;
 
     @Column(name = "ORIGINAL_FILENAME", nullable = false, length = 255)

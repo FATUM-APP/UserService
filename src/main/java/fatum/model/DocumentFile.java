@@ -16,6 +16,12 @@ import lombok.NoArgsConstructor;
 
 import java.time.Instant;
 
+/**
+ * Identity document of a user, stored as photographs.
+ *
+ * <p>Single sided documents (passport) only fill the front side; the rest need both sides. The object
+ * keys point to files held by the shared storage service, so this table never knows a bucket name.</p>
+ */
 @Entity
 @Table(name = "DOCUMENT_FILES")
 @Getter
@@ -29,17 +35,26 @@ public class DocumentFile {
     @Column(name = "ID", length = 36)
     private String id;
 
-    @Column(name = "DOCUMENT_KEY", nullable = false, length = 255)
-    private String documentKey;
+    @Column(name = "FRONT_KEY", nullable = false, length = 512)
+    private String frontKey;
 
-    @Column(name = "ORIGINAL_FILENAME", nullable = false, length = 255)
-    private String originalFilename;
+    @Column(name = "BACK_KEY", length = 512)
+    private String backKey;
+
+    @Column(name = "FRONT_FILENAME", nullable = false, length = 255)
+    private String frontFilename;
+
+    @Column(name = "BACK_FILENAME", length = 255)
+    private String backFilename;
 
     @Column(name = "CONTENT_TYPE", nullable = false, length = 100)
     private String contentType;
 
-    @Column(name = "FILE_SIZE", nullable = false)
-    private long fileSize;
+    @Column(name = "FRONT_SIZE", nullable = false)
+    private long frontSize;
+
+    @Column(name = "BACK_SIZE")
+    private Long backSize;
 
     @Column(name = "CREATED_AT", nullable = false, updatable = false)
     private Instant createdAt;
@@ -52,30 +67,52 @@ public class DocumentFile {
     private User user;
 
     public DocumentFile(
-            String documentKey,
-            String originalFilename,
+            String frontKey,
+            String backKey,
+            String frontFilename,
+            String backFilename,
             String contentType,
-            long fileSize,
+            long frontSize,
+            Long backSize,
             User user) {
-        this.documentKey = requireText(documentKey, "documentKey");
-        this.originalFilename = requireText(originalFilename, "originalFilename");
-        this.contentType = requireText(contentType, "contentType");
-        this.fileSize = requireNonNegative(fileSize);
+        apply(frontKey, backKey, frontFilename, backFilename, contentType, frontSize, backSize);
         this.user = user;
         this.createdAt = Instant.now();
         this.updatedAt = this.createdAt;
     }
 
+    /** Replaces both sides with a freshly uploaded document. */
     public void replace(
-            String documentKey,
-            String originalFilename,
+            String frontKey,
+            String backKey,
+            String frontFilename,
+            String backFilename,
             String contentType,
-            long fileSize) {
-        this.documentKey = requireText(documentKey, "documentKey");
-        this.originalFilename = requireText(originalFilename, "originalFilename");
-        this.contentType = requireText(contentType, "contentType");
-        this.fileSize = requireNonNegative(fileSize);
+            long frontSize,
+            Long backSize) {
+        apply(frontKey, backKey, frontFilename, backFilename, contentType, frontSize, backSize);
         this.updatedAt = Instant.now();
+    }
+
+    public boolean hasBackSide() {
+        return backKey != null && !backKey.isBlank();
+    }
+
+    private void apply(
+            String frontKey,
+            String backKey,
+            String frontFilename,
+            String backFilename,
+            String contentType,
+            long frontSize,
+            Long backSize) {
+        this.frontKey = requireText(frontKey, "frontKey");
+        this.backKey = backKey == null || backKey.isBlank() ? null : backKey.trim();
+        this.frontFilename = requireText(frontFilename, "frontFilename");
+        this.backFilename = backFilename == null || backFilename.isBlank() ? null : backFilename.trim();
+        this.contentType = requireText(contentType, "contentType");
+        this.frontSize = requireNonNegative(frontSize);
+        this.backSize = backSize == null ? null : requireNonNegative(backSize);
     }
 
     private static String requireText(String value, String fieldName) {

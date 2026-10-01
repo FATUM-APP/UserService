@@ -3,8 +3,11 @@ package fatum.controller;
 import software.amazon.awssdk.core.exception.SdkException;
 import fatum.dto.ApiError;
 import fatum.exception.FatumUserException;
+import fatum.storage.StorageException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -20,6 +23,8 @@ import java.util.Map;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
     @ExceptionHandler(FatumUserException.class)
     public ResponseEntity<ApiError> handleFatumUserException(
             FatumUserException exception,
@@ -33,10 +38,41 @@ public class GlobalExceptionHandler {
                  FatumUserException.EMAIL_EXISTS,
                  FatumUserException.USERNAME_EXISTS,
                  FatumUserException.PHONE_EXISTS,
-                 FatumUserException.DOCUMENT_EXISTS -> HttpStatus.CONFLICT;
+                 FatumUserException.DOCUMENT_EXISTS,
+                 FatumUserException.VERIFICATION_ALREADY_COMPLETED,
+                 FatumUserException.NO_ATTEMPTS_LEFT,
+                 FatumUserException.PROFILE_PHOTO_MISMATCH -> HttpStatus.CONFLICT;
+            case FatumUserException.VERIFICATION_DISABLED -> HttpStatus.SERVICE_UNAVAILABLE;
             default -> HttpStatus.BAD_REQUEST;
         };
         return buildError(status, exception.getMessage(), request.getRequestURI(), Map.of());
+    }
+
+    /**
+     * The shared storage service rejected the request (4xx, the message is useful to the caller) or
+     * failed (anything else, which is a 502 for this service).
+     */
+    @ExceptionHandler(StorageException.class)
+    public ResponseEntity<ApiError> handleStorageException(
+            StorageException exception,
+            HttpServletRequest request) {
+        HttpStatus status = exception.isClientError() ? HttpStatus.BAD_REQUEST : HttpStatus.BAD_GATEWAY;
+        if (status.is5xxServerError()) {
+            log.error("The storage service failed handling {}", request.getRequestURI(), exception);
+        }
+        return buildError(status, exception.getMessage(), request.getRequestURI(), Map.of());
+    }
+
+    /** Structural guard of the domain objects; it means the caller sent an unusable value. */
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ApiError> handleIllegalArgument(
+            IllegalArgumentException exception,
+            HttpServletRequest request) {
+        return buildError(
+                HttpStatus.BAD_REQUEST,
+                exception.getMessage() == null ? "Invalid request" : exception.getMessage(),
+                request.getRequestURI(),
+                Map.of());
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

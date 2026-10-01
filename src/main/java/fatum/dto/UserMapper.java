@@ -35,7 +35,7 @@ public class UserMapper {
                 user.getUsername(),
                 user.getPhoneNumber(),
                 user.getRole(),
-                user.isAuthenticated(),
+                user.getVerificationStatus(),
                 user.isActive(),
                 user.getDocument(),
                 user.getGender(),

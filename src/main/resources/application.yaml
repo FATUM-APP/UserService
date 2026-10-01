@@ -20,8 +20,9 @@ spring:
     baseline-version: 0
   servlet:
     multipart:
-      max-file-size: ${MAX_FILE_SIZE:10MB}
-      max-request-size: ${MAX_REQUEST_SIZE:10MB}
+      # Documents are photographs now, so a single request carries two images.
+      max-file-size: ${MAX_FILE_SIZE:15MB}
+      max-request-size: ${MAX_REQUEST_SIZE:30MB}
   security:
     oauth2:
       resourceserver:
@@ -33,12 +34,58 @@ server:
 
 aws:
   region: ${AWS_REGION:us-east-1}
-  s3:
-    profile-images-bucket: ${AWS_S3_PROFILE_IMAGES_BUCKET}
-    documents-bucket: ${AWS_S3_DOCUMENTS_BUCKET}
   cognito:
     user-pool-id: ${USER_POOL_ID}
 
+# ------------------------------------------------------------------------------------------------
+# Shared storage microservice. The user service no longer talks to S3: it names a route and the
+# storage service decides which bucket receives the object.
+# ------------------------------------------------------------------------------------------------
+fatum:
+  file-service:
+    base-url: ${FILE_SERVICE_URL:http://localhost:8081}
+    internal-secret: ${FILE_SERVICE_SECRET:}
+    connect-timeout: ${FILE_SERVICE_CONNECT_TIMEOUT:2s}
+    read-timeout: ${FILE_SERVICE_READ_TIMEOUT:20s}
+    profile-image-route: ${FILE_SERVICE_PROFILE_IMAGE_ROUTE:user-service:profile-image}
+    liveness-route: ${FILE_SERVICE_LIVENESS_ROUTE:user-service:liveness}
+    document-route: ${FILE_SERVICE_DOCUMENT_ROUTE:user-service:document}
+
+  cognito:
+    enabled: ${COGNITO_GROUPS_ENABLED:true}
+    user-pool-id: ${USER_POOL_ID:}
+    verified-group: ${COGNITO_VERIFIED_GROUP:VERIFIED}
+    professional-group: ${COGNITO_PROFESSIONAL_GROUP:PROFESSIONAL}
+    use-subject-as-username: ${COGNITO_USE_SUB_AS_USERNAME:false}
+    # A Cognito outage must not block a verification the database already recorded.
+    strict: ${COGNITO_STRICT:false}
+
+  # ----------------------------------------------------------------------------------------------
+  # Identity verification. Every threshold is configuration so the business rules can be tuned
+  # without a release.
+  # ----------------------------------------------------------------------------------------------
+  verification:
+    enabled: ${VERIFICATION_ENABLED:true}
+    max-attempts: ${VERIFICATION_MAX_ATTEMPTS:3}
+    verified-threshold: ${VERIFICATION_VERIFIED_THRESHOLD:80}
+    manual-threshold: ${VERIFICATION_MANUAL_THRESHOLD:30}
+    hard-reject-threshold: ${VERIFICATION_HARD_REJECT_THRESHOLD:20}
+    fraud-risk-threshold: ${VERIFICATION_FRAUD_RISK_THRESHOLD:70}
+    min-face-match: ${VERIFICATION_MIN_FACE_MATCH:20}
+    profile-photo-change-threshold: ${VERIFICATION_PROFILE_PHOTO_THRESHOLD:80}
+    face-similarity-threshold: ${VERIFICATION_FACE_SIMILARITY:80}
+    weights:
+      document-match: ${VERIFICATION_WEIGHT_DOCUMENT:0.35}
+      document-liveness-match: ${VERIFICATION_WEIGHT_DOCUMENT_LIVENESS:0.30}
+      profile-liveness-match: ${VERIFICATION_WEIGHT_PROFILE_LIVENESS:0.20}
+      authenticity: ${VERIFICATION_WEIGHT_AUTHENTICITY:0.15}
+    analyzers:
+      textract-enabled: ${VERIFICATION_TEXTRACT_ENABLED:true}
+      rekognition-enabled: ${VERIFICATION_REKOGNITION_ENABLED:true}
+      bedrock-enabled: ${VERIFICATION_BEDROCK_ENABLED:true}
+      bedrock-model-id: ${VERIFICATION_BEDROCK_MODEL_ID:anthropic.claude-3-5-sonnet-20241022-v2:0}
+      bedrock-max-tokens: ${VERIFICATION_BEDROCK_MAX_TOKENS:800}
+      bedrock-temperature: ${VERIFICATION_BEDROCK_TEMPERATURE:0}
 
 app:
   cors:

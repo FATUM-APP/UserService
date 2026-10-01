@@ -3,6 +3,7 @@ package fatum.service;
 import fatum.exception.FatumUserException;
 import fatum.model.User;
 import fatum.model.constant.UserRole;
+import fatum.model.constant.VerificationStatus;
 import fatum.repository.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,9 +15,11 @@ import java.util.List;
 public class UserService {
 
     private final UserRepository userRepository;
+    private final CognitoGroupService cognitoGroupService;
 
-    public UserService(UserRepository userRepository) {
+    public UserService(UserRepository userRepository, CognitoGroupService cognitoGroupService) {
         this.userRepository = userRepository;
+        this.cognitoGroupService = cognitoGroupService;
     }
 
     @Transactional
@@ -110,7 +113,11 @@ public class UserService {
         updateUsername(existingUser, username);
         updatePhoneNumber(existingUser, phoneNumber);
         updateRoleAndCity(existingUser, role, city);
-        return userRepository.save(existingUser);
+        User saved = userRepository.save(existingUser);
+        if (saved.getRole() == UserRole.PROFESSIONAL) {
+            cognitoGroupService.grantProfessional(saved.getUsername());
+        }
+        return saved;
     }
 
     @Transactional
@@ -120,8 +127,13 @@ public class UserService {
         userRepository.save(user);
     }
 
-    public boolean userIsAuthenticated(String awsId) throws FatumUserException {
-        return getUserById(awsId).isAuthenticated();
+    /** Identity verification state of the user, replacing the former boolean flag. */
+    public VerificationStatus getVerificationStatus(String awsId) throws FatumUserException {
+        return getUserById(awsId).getVerificationStatus();
+    }
+
+    public boolean isUserVerified(String awsId) throws FatumUserException {
+        return getUserById(awsId).isVerified();
     }
 
     public boolean isUserActiveByEmail(String email) throws FatumUserException {

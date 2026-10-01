@@ -20,7 +20,22 @@ public class FatumUserException extends Exception {
     public static final String INACTIVE = "User is inactive";
     public static final String FILE_NOT_FOUND = "File not found";
     public static final String INVALID_DOCUMENT = "Document file is required";
-    public static final String INVALID_DOCUMENT_TYPE = "Only PDF and image document files are allowed";
+    public static final String INVALID_DOCUMENT_TYPE = "Only image document files are allowed";
+    public static final String DOCUMENT_BACK_REQUIRED = "Both sides of the document are required for this document type";
+    public static final String INVALID_LIVENESS = "Liveness evidence is required";
+    public static final String INVALID_LIVENESS_TYPE = "Only image files are allowed as liveness evidence";
+    public static final String INCOMPLETE_VERIFICATION_MATERIAL =
+            "Liveness evidence, profile picture and identity document are required to verify the identity";
+    public static final String VERIFICATION_ALREADY_COMPLETED = "The identity of the user is already verified";
+    public static final String VERIFICATION_DISABLED = "Identity verification is disabled";
+    public static final String NO_ATTEMPTS_LEFT =
+            "No verification attempts left; the case is waiting for an administrator";
+    public static final String PROFILE_PHOTO_MISMATCH =
+            "The new profile picture does not match the liveness reference";
+    public static final String ADMIN_REVIEW_PHOTO_REQUIRED =
+            "A new profile picture is required to verify the identity manually";
+    public static final String ATTEMPT_NOT_FOUND = "Verification attempt not found";
+    public static final String COGNITO_GROUP_FAILURE = "The user group could not be updated";
     public static final String FORBIDDEN = "You are not allowed to perform this action";
 
     public FatumUserException(String message) {

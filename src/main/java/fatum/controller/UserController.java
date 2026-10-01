@@ -7,7 +7,9 @@ import fatum.dto.UserStatusResponse;
 import fatum.dto.UserUpdateRequest;
 import fatum.exception.FatumUserException;
 import fatum.model.User;
+import fatum.model.constant.VerificationStatus;
 import fatum.service.UserService;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -35,7 +37,7 @@ public class UserController {
     }
 
     @PostMapping("/validate-signup")
-    public ResponseEntity<Void> validateSignup(@RequestBody CreateUserRequest dto) throws FatumUserException {
+    public ResponseEntity<Void> validateSignup(@Valid @RequestBody CreateUserRequest dto) throws FatumUserException {
 
         User tempUser = UserMapper.toEntity(dto);
         userService.validateUser(tempUser);
@@ -44,7 +46,7 @@ public class UserController {
 
     @PostMapping("/register")
     public ResponseEntity<UserResponse> registerUser(
-            @RequestBody CreateUserRequest request,
+            @Valid @RequestBody CreateUserRequest request,
             @RequestHeader("Lambda-Secret") String receivedSecret
             ) throws FatumUserException {
         if (!lambdaSecret.equals(receivedSecret)) throw new FatumUserException(FatumUserException.FORBIDDEN);
@@ -63,7 +65,7 @@ public class UserController {
     @PutMapping("/update")
     public ResponseEntity<UserResponse> updateCurrentUser(
             @AuthenticationPrincipal Jwt jwt,
-            @RequestBody UserUpdateRequest request) throws FatumUserException {
+            @Valid @RequestBody UserUpdateRequest request) throws FatumUserException {
         String awsId = jwt.getSubject();
         User user = userService.updateUser(
                 awsId,
@@ -79,8 +81,9 @@ public class UserController {
     @GetMapping("/me/authenticated")
     public ResponseEntity<UserStatusResponse> isCurrentUserAuthenticated(
             @AuthenticationPrincipal Jwt jwt) throws FatumUserException {
-        boolean authenticated = userService.userIsAuthenticated(jwt.getSubject());
-        return ResponseEntity.status(HttpStatus.OK).body(new UserStatusResponse(authenticated));
+        VerificationStatus status = userService.getVerificationStatus(jwt.getSubject());
+        return ResponseEntity.status(HttpStatus.OK)
+                .body(new UserStatusResponse(status, status == VerificationStatus.VERIFIED));
     }
 
     @PutMapping("/deactivate")
