@@ -7,6 +7,7 @@ import fatum.model.constant.UserRole;
 import fatum.model.constant.VerificationStatus;
 import fatum.repository.UserRepository;
 import fatum.service.cognito.CognitoGroupService;
+import fatum.service.cognito.CognitoUserService;
 import fatum.support.Fixtures;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -35,6 +36,8 @@ class UserServiceTest {
 
     @Mock
     private CognitoGroupService cognitoGroupService;
+    @Mock
+    private CognitoUserService cognitoUserService;
 
     @InjectMocks
     private UserService service;
@@ -424,11 +427,26 @@ class UserServiceTest {
     void deactivatesAnAccount() throws FatumUserException {
         User existing = Fixtures.user();
         when(userRepository.findByEmailIgnoreCase(existing.getEmail())).thenReturn(existing);
+        when(userRepository.save(existing)).thenReturn(existing);
 
         service.deactivateUser(existing.getEmail());
 
         assertThat(existing.isActive()).isFalse();
         verify(userRepository).save(existing);
+        verify(cognitoUserService).revokeAccess(USER_ID);
+    }
+
+    @Test
+    void deactivatingAnAccountThatCognitoRefusesIsReportedWhenStrictModeIsOn() throws FatumUserException {
+        User existing = Fixtures.user();
+        when(userRepository.findByEmailIgnoreCase(existing.getEmail())).thenReturn(existing);
+        when(userRepository.save(existing)).thenReturn(existing);
+        doThrow(new FatumUserException(FatumUserException.COGNITO_GROUP_FAILURE))
+                .when(cognitoUserService).revokeAccess(USER_ID);
+
+        assertThatThrownBy(() -> service.deactivateUser(existing.getEmail()))
+                .isInstanceOf(FatumUserException.class)
+                .hasMessage(FatumUserException.COGNITO_GROUP_FAILURE);
     }
 
     @Test

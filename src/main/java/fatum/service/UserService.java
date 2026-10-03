@@ -11,6 +11,7 @@ import fatum.model.constant.UserRole;
 import fatum.model.constant.VerificationStatus;
 import fatum.repository.UserRepository;
 import fatum.service.cognito.CognitoGroupService;
+import fatum.service.cognito.CognitoUserService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,12 +23,15 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final CognitoGroupService cognitoGroupService;
+    private final CognitoUserService cognitoUserService;
 
     public UserService(UserRepository userRepository,
-                       CognitoGroupService cognitoGroupService
+                       CognitoGroupService cognitoGroupService,
+                       CognitoUserService cognitoUserService
     ) {
         this.userRepository = userRepository;
         this.cognitoGroupService = cognitoGroupService;
+        this.cognitoUserService = cognitoUserService;
     }
 
     /**
@@ -141,11 +145,19 @@ public class UserService {
         return saved;
     }
 
+    /**
+     * Deactivates the account and takes away every access it had.
+     *
+     * <p>The database is written first and the user pool follows, the same order the other
+     * operations use: the local state is the source of truth, and a Cognito outage is logged instead
+     * of blocking the deactivation (unless strict mode is enabled).</p>
+     */
     @Transactional
     public void deactivateUser(String email) throws FatumUserException {
         User user = getUserByEmail(email);
         user.deactivate();
-        userRepository.save(user);
+        User saved = userRepository.save(user);
+        cognitoUserService.revokeAccess(saved.getAwsId());
     }
 
     public VerificationStatus getVerificationStatus(String awsId) throws FatumUserException {
