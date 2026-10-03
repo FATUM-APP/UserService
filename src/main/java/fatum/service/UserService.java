@@ -9,8 +9,8 @@ import fatum.model.Address;
 import fatum.model.User;
 import fatum.model.constant.UserRole;
 import fatum.model.constant.VerificationStatus;
-import fatum.repository.AddressRepository;
 import fatum.repository.UserRepository;
+import fatum.service.cognito.CognitoGroupService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 

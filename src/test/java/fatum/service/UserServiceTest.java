@@ -6,6 +6,7 @@ import fatum.model.User;
 import fatum.model.constant.UserRole;
 import fatum.model.constant.VerificationStatus;
 import fatum.repository.UserRepository;
+import fatum.service.cognito.CognitoGroupService;
 import fatum.support.Fixtures;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
