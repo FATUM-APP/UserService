@@ -22,6 +22,7 @@ public class UserMapper {
                 .username(request.username())
                 .document(request.document())
                 .documentType(request.documentType())
+                .gender(request.gender())
                 .build();
     }
 

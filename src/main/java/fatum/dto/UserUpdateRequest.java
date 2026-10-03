@@ -23,4 +23,16 @@ public record UserUpdateRequest(
         @Valid
         NewAddressRequest newAddress
 ) {
+
+    /**
+     * Cleans the text of the fields that were sent.
+     *
+     * <p>An omitted field stays {@code null}, which is what the service reads as "do not touch it".
+     * A field made of spaces becomes empty, so the pattern that forbids blank values rejects it.</p>
+     */
+    public UserUpdateRequest {
+        username = TextNormalizer.lower(username);
+        phoneNumber = TextNormalizer.trim(phoneNumber);
+        city = TextNormalizer.lower(city);
+    }
 }

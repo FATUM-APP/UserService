@@ -1,6 +1,9 @@
 package fatum.support;
 
+import fatum.dto.NewAddressRequest;
 import fatum.exception.FatumUserException;
+import fatum.mapper.AddressMapper;
+import fatum.model.Address;
 import fatum.model.DocumentFile;
 import fatum.model.ProfileImage;
 import fatum.model.User;
@@ -35,25 +38,34 @@ public final class Fixtures {
     public static User userWithEmail(String awsId, String email) {
         return build(awsId, email, LocalDate.of(1998, 5, 10));
     }
-/**
+
     private static User build(String awsId, String email, LocalDate birthDate) {
         int seed = Math.abs(awsId.hashCode());
         try {
-            return new User(
-                    awsId,
-                    email,
-                    "Jane Doe",
-                    "+57300" + seed % 1000000,
-                    birthDate,
-                    "jane" + seed % 1000,
-                    "1020" + seed % 100000,
-                    DocumentType.ID,
-                    Gender.FEMALE);
+            return new User.Builder()
+                    .awsId(awsId)
+                    .email(email)
+                    .name("Jane Doe")
+                    .phoneNumber("+57300" + seed % 1000000)
+                    .birthDate(birthDate)
+                    .username("jane" + seed % 1000)
+                    .document("1020" + seed % 100000)
+                    .documentType(DocumentType.ID)
+                    .gender(Gender.FEMALE)
+                    .build();
         } catch (FatumUserException exception) {
             throw new IllegalStateException("The fixture user must be valid", exception);
         }
     }
- **/
+
+    /** An address as the client sends it; the record normalises it on the way in. */
+    public static NewAddressRequest addressRequest() {
+        return new NewAddressRequest("Calle 1 # 2-3", "Casa", "Bogota", "Cundinamarca", "Colombia");
+    }
+
+    public static Address address(User user) {
+        return AddressMapper.toEntity(addressRequest(), user);
+    }
 
     public static DocumentFile document(User user) {
         return document(user, "documents/2026/10/03/id.pdf");

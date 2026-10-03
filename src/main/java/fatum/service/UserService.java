@@ -1,8 +1,10 @@
 package fatum.service;
 
 import fatum.dto.NewAddressRequest;
+import fatum.dto.TextNormalizer;
 import fatum.dto.UserUpdateRequest;
 import fatum.exception.FatumUserException;
+import fatum.mapper.AddressMapper;
 import fatum.model.User;
 import fatum.model.constant.UserRole;
 import fatum.model.constant.VerificationStatus;
@@ -45,7 +47,7 @@ public class UserService {
 
 
     public User getUserById(String awsId) throws FatumUserException {
-        User user = userRepository.findByAwsId(normalize(awsId));
+        User user = userRepository.findByAwsId(TextNormalizer.trimOrNull(awsId));
         if (user == null) {
             throw new FatumUserException(FatumUserException.USER_NOT_FOUND);
         }
@@ -53,12 +55,12 @@ public class UserService {
     }
 
     public User userExistsById(String awsId) {
-        return userRepository.findByAwsId(normalize(awsId));
+        return userRepository.findByAwsId(TextNormalizer.trimOrNull(awsId));
     }
 
 
     public User getUserByDocument(String document) throws FatumUserException {
-        User user = userRepository.findByDocumentIgnoreCase(normalize(document));
+        User user = userRepository.findByDocumentIgnoreCase(TextNormalizer.trimOrNull(document));
         if (user == null) {
             throw new FatumUserException(FatumUserException.USER_NOT_FOUND);
         }
@@ -66,12 +68,12 @@ public class UserService {
     }
 
     public User userExistsByDocument(String document) {
-        return userRepository.findByDocumentIgnoreCase(normalize(document));
+        return userRepository.findByDocumentIgnoreCase(TextNormalizer.trimOrNull(document));
     }
 
 
     public User getUserByUsername(String username) throws FatumUserException {
-             User user = userRepository.findByUsernameIgnoreCase(normalize( username));
+             User user = userRepository.findByUsernameIgnoreCase(TextNormalizer.trimOrNull( username));
         if (user == null) {
             throw new FatumUserException(FatumUserException.USER_NOT_FOUND);
         }
@@ -79,11 +81,11 @@ public class UserService {
     }
 
     public User userExistsByUsername(String username) {
-        return userRepository.findByUsernameIgnoreCase(normalize( username));
+        return userRepository.findByUsernameIgnoreCase(TextNormalizer.trimOrNull( username));
     }
 
     public User getUserByEmail(String email) throws FatumUserException {
-        User user = userRepository.findByEmailIgnoreCase(normalize(email));
+        User user = userRepository.findByEmailIgnoreCase(TextNormalizer.trimOrNull(email));
         if (user == null) {
             throw new FatumUserException(FatumUserException.USER_NOT_FOUND);
         }
@@ -91,12 +93,12 @@ public class UserService {
     }
 
     public User userExistsByEmail(String email) {
-        return userRepository.findByEmailIgnoreCase(normalize(email));
+        return userRepository.findByEmailIgnoreCase(TextNormalizer.trimOrNull(email));
     }
 
 
     public User getUserByPhoneNumber(String phoneNumber) throws FatumUserException {
-        User user = userRepository.findByPhoneNumber(normalize(phoneNumber));
+        User user = userRepository.findByPhoneNumber(TextNormalizer.trimOrNull(phoneNumber));
         if (user == null) {
             throw new FatumUserException(FatumUserException.USER_NOT_FOUND);
         }
@@ -104,12 +106,12 @@ public class UserService {
     }
 
     public User userExistsByPhoneNumber(String phoneNumber) {
-        return userRepository.findByPhoneNumber(normalize(phoneNumber));
+        return userRepository.findByPhoneNumber(TextNormalizer.trimOrNull(phoneNumber));
     }
 
 
     public List<User> getUsersByName(String name) {
-        return userRepository.findByNameIgnoreCase(normalize(name));
+        return userRepository.findByNameIgnoreCase(TextNormalizer.trimOrNull(name));
     }
 
     /**
@@ -151,7 +153,7 @@ public class UserService {
     }
 
     private void updateUsername(User user, String requestedUsername) throws FatumUserException {
-        String username = normalize(requestedUsername);
+        String username = TextNormalizer.trimOrNull(requestedUsername);
         if (username == null || username.equalsIgnoreCase(user.getUsername())) {
             return;
         }
@@ -161,7 +163,7 @@ public class UserService {
 
     private void updatePhoneNumber(User user, String requestedPhoneNumber)
             throws FatumUserException {
-        String phoneNumber = normalize(requestedPhoneNumber);
+        String phoneNumber = TextNormalizer.trimOrNull(requestedPhoneNumber);
         if (phoneNumber == null || phoneNumber.equals(user.getPhoneNumber())) {
             return;
         }
@@ -169,18 +171,16 @@ public class UserService {
         user.setPhoneNumber(phoneNumber);
     }
 
+    /**
+     * Applies the address that was sent and, when a role was sent, the new role.
+     *
+     * <p>The rule "a professional needs an address" is not repeated here: the entity owns it and
+     * rejects the change with {@code PROFESSIONAL_CITY} when the account has none.</p>
+     */
     private void updateRoleAndAddress(User user, UserRole role, NewAddressRequest newAddress)
             throws FatumUserException {
-        String residence = normalize(newAddress.residence());
-        UserRole targetRole = role== null ? user.getRole() : role;
-        String effectiveCity = city == null ? user.getCity() : city;
-
-        if (targetRole == UserRole.PROFESSIONAL
-                && (effectiveCity == null || effectiveCity.isBlank())) {
-            throw new FatumUserException(FatumUserException.PROFESSIONAL_CITY);
-        }
-        if (city != null) {
-            user.setCity(city);
+        if (newAddress != null) {
+            user.addAddress(AddressMapper.toEntity(newAddress, user));
         }
         if (role != null) {
             user.setRole(role);
@@ -238,7 +238,4 @@ public class UserService {
         }
     }
 
-    private String normalize(String value) {
-        return value == null || value.isBlank() ? null : value.trim();
-    }
 }

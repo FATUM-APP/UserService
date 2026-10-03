@@ -6,6 +6,7 @@ import fatum.exception.FatumUserException;
 import fatum.model.User;
 import fatum.model.constant.VerificationStatus;
 import fatum.service.UserService;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -33,7 +34,7 @@ public class UserController {
     }
 
     @PostMapping("/validate-signup")
-    public ResponseEntity<Void> validateSignup(@RequestBody CreateUserRequest dto) throws FatumUserException {
+    public ResponseEntity<Void> validateSignup(@Valid @RequestBody CreateUserRequest dto) throws FatumUserException {
 
         User tempUser = UserMapper.toEntity(dto);
         userService.validateUser(tempUser);
@@ -42,7 +43,7 @@ public class UserController {
 
     @PostMapping("/register")
     public ResponseEntity<UserResponse> registerUser(
-            @RequestBody CreateUserRequest request,
+            @Valid @RequestBody CreateUserRequest request,
             @RequestHeader("Lambda-Secret") String receivedSecret
             ) throws FatumUserException {
         if (!lambdaSecret.equals(receivedSecret)) throw new FatumUserException(FatumUserException.FORBIDDEN);
@@ -61,15 +62,9 @@ public class UserController {
     @PutMapping("/update")
     public ResponseEntity<UserResponse> updateCurrentUser(
             @AuthenticationPrincipal Jwt jwt,
-            @RequestBody UserUpdateRequest request) throws FatumUserException {
+            @Valid @RequestBody UserUpdateRequest request) throws FatumUserException {
         String awsId = jwt.getSubject();
-        User user = userService.updateUser(
-                awsId,
-                request.username(),
-                request.phoneNumber(),
-                request.role(),
-                request.city()
-        );
+        User user = userService.updateUser(awsId, request);
 
         return ResponseEntity.status(HttpStatus.OK).body(toResponse(user));
     }

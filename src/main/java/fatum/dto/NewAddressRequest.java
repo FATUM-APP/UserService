@@ -15,7 +15,7 @@ public record NewAddressRequest(
         @Size(max = 50, message = "City must not exceed 50 characters")
         String city,
 
-        @NotBlank(message = "City must not be blank")
+        @NotBlank(message = "State must not be blank")
         @Size(max = 50, message = "State must not exceed 50 characters")
         String state,
 
@@ -23,4 +23,19 @@ public record NewAddressRequest(
         @Size(max = 50, message = "Country must not exceed 50 characters")
         String country
 ) {
+
+    /**
+     * Cleans every text field of the address.
+     *
+     * <p>Addresses are stored folded to lower case, because that is the form the lookup by residence
+     * and the allowed-location list use. The rule lives here so the mapper and the entity do not
+     * repeat it.</p>
+     */
+    public NewAddressRequest {
+        residence = TextNormalizer.lower(residence);
+        alias = TextNormalizer.lower(alias);
+        city = TextNormalizer.lower(city);
+        state = TextNormalizer.lower(state);
+        country = TextNormalizer.lower(country);
+    }
 }

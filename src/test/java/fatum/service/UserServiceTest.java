@@ -1,5 +1,6 @@
 package fatum.service;
 
+import fatum.dto.UserUpdateRequest;
 import fatum.exception.FatumUserException;
 import fatum.model.User;
 import fatum.model.constant.UserRole;
@@ -176,7 +177,8 @@ class UserServiceTest {
         when(userRepository.findByPhoneNumber("+573000000001")).thenReturn(existing);
         when(userRepository.save(existing)).thenReturn(existing);
 
-        User updated = service.updateUser(USER_ID, "other", "+573000000001", null, null);
+        User updated = service.updateUser(USER_ID,
+                new UserUpdateRequest("other", "+573000000001", null, null, null));
 
         assertThat(updated.getUsername()).isEqualTo("other");
         assertThat(updated.getPhoneNumber()).isEqualTo("+573000000001");
@@ -311,7 +313,8 @@ class UserServiceTest {
         when(userRepository.findByPhoneNumber("+573001112233")).thenReturn(null);
         when(userRepository.save(existing)).thenReturn(existing);
 
-        User updated = service.updateUser(USER_ID, "newjane", "+573001112233", null, null);
+        User updated = service.updateUser(USER_ID,
+                new UserUpdateRequest("newjane", "+573001112233", null, null, null));
 
         assertThat(updated.getUsername()).isEqualTo("newjane");
         assertThat(updated.getPhoneNumber()).isEqualTo("+573001112233");
@@ -325,7 +328,8 @@ class UserServiceTest {
         when(userRepository.findByAwsId(USER_ID)).thenReturn(existing);
         when(userRepository.findByUsernameIgnoreCase("taken")).thenReturn(Fixtures.user("aws-user-2"));
 
-        assertThatThrownBy(() -> service.updateUser(USER_ID, "taken", null, null, null))
+        assertThatThrownBy(() -> service.updateUser(USER_ID,
+                new UserUpdateRequest("taken", null, null, null, null)))
                 .isInstanceOf(FatumUserException.class)
                 .hasMessage(FatumUserException.USERNAME_EXISTS);
     }
@@ -337,7 +341,8 @@ class UserServiceTest {
         when(userRepository.findByPhoneNumber("+573009998877"))
                 .thenReturn(Fixtures.user("aws-user-2"));
 
-        assertThatThrownBy(() -> service.updateUser(USER_ID, null, "+573009998877", null, null))
+        assertThatThrownBy(() -> service.updateUser(USER_ID,
+                new UserUpdateRequest(null, "+573009998877", null, null, null)))
                 .isInstanceOf(FatumUserException.class)
                 .hasMessage(FatumUserException.PHONE_EXISTS);
     }
@@ -348,12 +353,13 @@ class UserServiceTest {
         when(userRepository.findByAwsId(USER_ID)).thenReturn(existing);
         when(userRepository.save(existing)).thenReturn(existing);
 
-        User updated = service.updateUser(
-                USER_ID,
-                "  " + existing.getUsername().toUpperCase() + " ",
-                existing.getPhoneNumber(),
-                null,
-                null);
+        User updated = service.updateUser(USER_ID,
+                new UserUpdateRequest(
+                        existing.getUsername().toUpperCase(),
+                        existing.getPhoneNumber(),
+                        null,
+                        null,
+                        null));
 
         assertThat(updated.getUsername()).isEqualTo(existing.getUsername());
     }
@@ -364,33 +370,38 @@ class UserServiceTest {
         when(userRepository.findByAwsId(USER_ID)).thenReturn(existing);
         when(userRepository.save(existing)).thenReturn(existing);
 
-        User updated = service.updateUser(USER_ID, null, null, UserRole.PROFESSIONAL, "Bogota");
+        User updated = service.updateUser(USER_ID,
+                new UserUpdateRequest(null, null, UserRole.PROFESSIONAL, null, Fixtures.addressRequest()));
 
         assertThat(updated.getRole()).isEqualTo(UserRole.PROFESSIONAL);
-        assertThat(updated.getCity()).isEqualTo("Bogota");
+        assertThat(updated.getAddressList()).hasSize(1);
+        assertThat(updated.getAddressList().getFirst().getCity()).isEqualTo("bogota");
         verify(cognitoGroupService).grantProfessional(USER_ID);
     }
 
     @Test
-    void aProfessionalWithoutACityIsRejected() {
+    void aProfessionalWithoutAnAddressIsRejected() {
         User existing = Fixtures.user();
         when(userRepository.findByAwsId(USER_ID)).thenReturn(existing);
 
-        assertThatThrownBy(() -> service.updateUser(USER_ID, null, null, UserRole.PROFESSIONAL, null))
+        assertThatThrownBy(() -> service.updateUser(USER_ID,
+                new UserUpdateRequest(null, null, UserRole.PROFESSIONAL, null, null)))
                 .isInstanceOf(FatumUserException.class)
                 .hasMessage(FatumUserException.PROFESSIONAL_CITY);
     }
 
     @Test
-    void aProfessionalKeepsTheCityItAlreadyHad() throws FatumUserException {
+    void aProfessionalKeepsTheAddressItAlreadyHad() throws FatumUserException {
         User existing = Fixtures.user();
-        existing.setCity("Medellin");
+        existing.addAddress(Fixtures.address(existing));
         when(userRepository.findByAwsId(USER_ID)).thenReturn(existing);
         when(userRepository.save(existing)).thenReturn(existing);
 
-        User updated = service.updateUser(USER_ID, null, null, UserRole.PROFESSIONAL, null);
+        User updated = service.updateUser(USER_ID,
+                new UserUpdateRequest(null, null, UserRole.PROFESSIONAL, null, null));
 
-        assertThat(updated.getCity()).isEqualTo("Medellin");
+        assertThat(updated.getRole()).isEqualTo(UserRole.PROFESSIONAL);
+        assertThat(updated.getAddressList()).hasSize(1);
     }
 
     @Test
@@ -399,10 +410,11 @@ class UserServiceTest {
         when(userRepository.findByAwsId(USER_ID)).thenReturn(existing);
         when(userRepository.save(existing)).thenReturn(existing);
 
-        User updated = service.updateUser(USER_ID, null, null, null, "Cali");
+        User updated = service.updateUser(USER_ID,
+                new UserUpdateRequest(null, null, null, null, Fixtures.addressRequest()));
 
         assertThat(updated.getRole()).isEqualTo(UserRole.CLIENT);
-        assertThat(updated.getCity()).isEqualTo("Cali");
+        assertThat(updated.getAddressList()).hasSize(1);
     }
 
     // ---------------------------------------------------------------------- misc

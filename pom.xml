@@ -183,8 +183,10 @@
                 <version>${jacoco.version}</version>
                 <configuration>
                     <excludes>
+                        <!-- Only fatum.service is measured: the gate is about the business rules. -->
                         <exclude>**/dto/**</exclude>
                         <exclude>**/model/**</exclude>
+                        <exclude>**/mapper/**</exclude>
                         <exclude>**/configuration/**</exclude>
                         <exclude>**/exception/**</exclude>
                         <exclude>**/controller/**</exclude>
