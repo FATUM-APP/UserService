@@ -6,19 +6,17 @@ import fatum.model.constant.DocumentType;
 import fatum.model.constant.Gender;
 import fatum.model.constant.UserRole;
 import fatum.model.constant.VerificationStatus;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
+import java.util.ArrayDeque;
+import java.util.LinkedHashSet;
 import java.util.Locale;
+import java.util.SequencedSet;
 
 @Entity
 @Table(name = "USERS")
@@ -54,6 +52,10 @@ public class User {
     @Column(name = "ROLE", nullable = false, length = 20)
     private UserRole role = UserRole.CLIENT;
 
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
+    private SequencedSet<Address> addressList;
+
+
     /**
      * Identity verification state. It replaces the former {@code isAuthenticated} boolean, which
      * could not express "the system could not decide, a human has to look at it".
@@ -79,36 +81,20 @@ public class User {
     @Column(name = "DOCUMENT_TYPE", nullable = false, length = 20)
     private DocumentType documentType;
 
-    @Column(name = "CITY", length = 50)
-    private String city;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "COUNTRY", nullable = false, length = 50)
-    private Country country = Country.COLOMBIA;
-
-    public User(
-            String awsId,
-            String email,
-            String name,
-            String phoneNumber,
-            LocalDate birthDate,
-            String username,
-            String document,
-            DocumentType documentType,
-            Gender gender
-            ) throws FatumUserException {
-        this.awsId = requireText(awsId);
-        this.email = requireText(email).toLowerCase(Locale.ROOT);
-        this.name = requireText(name).toUpperCase(Locale.ROOT);
-        setPhoneNumber(phoneNumber);
-        this.birthDate = (LocalDate) validateNonNullObject(birthDate);
-        setUsername(username);
-        this.document = requireText(document);
-        this.documentType = (DocumentType) validateNonNullObject(documentType);
+    private User(Builder builder) throws FatumUserException {
+        this.awsId = requireText(builder.awsId);
+        this.email = requireText(builder.email).toLowerCase(Locale.ROOT);
+        this.name = requireText(builder.name).toUpperCase(Locale.ROOT);
+        setPhoneNumber(builder.phoneNumber);
+        this.birthDate = (LocalDate) validateNonNullObject(builder.birthDate);
+        setUsername(builder.username);
+        this.document = requireText(builder.document).toUpperCase(Locale.ROOT);
+        this.documentType = (DocumentType) validateNonNullObject(builder.documentType);
         this.verificationStatus = VerificationStatus.VERIFIED;
         this.isActive = true;
-        this.country = Country.COLOMBIA;
-        this.gender = (Gender) validateNonNullObject(gender);
+        this.gender = (Gender) validateNonNullObject(builder.gender);
+        this.addressList = new LinkedHashSet<>();
     }
 
     public void setUsername(String newUsername) throws FatumUserException {
@@ -119,21 +105,28 @@ public class User {
         this.phoneNumber = requireText(newPhoneNumber);
     }
 
+    public void addAddress(Address address) {
+        addressList.add(address);
+    }
+
+    public void removeAddress(Address address) throws FatumUserException {
+        if (role == UserRole.PROFESSIONAL && addressList.size() == 1)
+            throw new FatumUserException(FatumUserException.PROFESSIONAL_CITY);
+        addressList.remove(address);
+    }
+
+    public void makePrincipalAddress(Address address) {
+        addressList.addFirst(address);
+    }
+
     public void setRole(UserRole newRole) throws FatumUserException {
         if (newRole == null) {
             throw new FatumUserException(FatumUserException.NULL_VALUE);
         }
-        if (newRole == UserRole.PROFESSIONAL && (city == null || city.isBlank())) {
+        if (newRole == UserRole.PROFESSIONAL && addressList.isEmpty()) {
             throw new FatumUserException(FatumUserException.PROFESSIONAL_CITY);
         }
         this.role = newRole;
-    }
-
-    public void setCity(String newCity) throws FatumUserException {
-        if (role == UserRole.PROFESSIONAL && (newCity == null || newCity.isBlank())) {
-            throw new FatumUserException(FatumUserException.PROFESSIONAL_CITY);
-        }
-        this.city = newCity == null || newCity.isBlank() ? null : newCity.trim();
     }
 
     /**
@@ -166,4 +159,35 @@ public class User {
         if (value == null || value.isBlank()) throw new FatumUserException(FatumUserException.NULL_VALUE);
         return value.trim();
     }
+
+    public static class Builder {
+        private String awsId;
+        private String email;
+        private String name;
+        private String phoneNumber;
+        private LocalDate birthDate;
+        private String username;
+        private String document;
+        private DocumentType documentType;
+        private Gender gender;
+
+        public Builder awsId(String awsId) { this.awsId = awsId; return this; }
+        public Builder email(String email) { this.email = email; return this; }
+        public Builder name(String name) { this.name = name; return this; }
+        public Builder phoneNumber(String phoneNumber) { this.phoneNumber = phoneNumber; return this; }
+        public Builder birthDate(LocalDate birthDate) { this.birthDate = birthDate; return this; }
+        public Builder username(String username) { this.username = username; return this; }
+        public Builder document(String document) { this.document = document; return this; }
+        public Builder documentType(DocumentType documentType) { this.documentType = documentType; return this; }
+        public Builder gender(Gender gender) { this.gender = gender; return this; }
+
+        public User build() throws FatumUserException {
+            return new User(this);
+        }
+    }
 }
+
+
+
+
+

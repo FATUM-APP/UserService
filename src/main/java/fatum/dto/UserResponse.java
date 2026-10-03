@@ -19,8 +19,6 @@ public record UserResponse(
         boolean isActive,
         String document,
         Gender gender,
-        DocumentType documentType,
-        String city,
-        Country country
+        DocumentType documentType
 ) {
 }

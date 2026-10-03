@@ -1,6 +1,7 @@
 package fatum.dto;
 
 import fatum.model.constant.UserRole;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
@@ -17,6 +18,9 @@ public record UserUpdateRequest(
 
         @Pattern(regexp = ".*\\S.*", message = "City must not be blank")
         @Size(max = 50, message = "City must not exceed 50 characters")
-        String city
+        String city,
+
+        @Valid
+        NewAddressRequest newAddress
 ) {
 }

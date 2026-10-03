@@ -48,7 +48,7 @@ public class ProfileImage {
     private Instant updatedAt;
 
     @OneToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "USER_AWS_ID", nullable = false, unique = true)
+    @JoinColumn(name = "USER_USERNAME", referencedColumnName = "USERNAME", nullable = false)
     private User user;
 
     public ProfileImage(

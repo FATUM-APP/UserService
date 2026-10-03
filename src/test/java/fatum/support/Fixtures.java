@@ -35,7 +35,7 @@ public final class Fixtures {
     public static User userWithEmail(String awsId, String email) {
         return build(awsId, email, LocalDate.of(1998, 5, 10));
     }
-
+/**
     private static User build(String awsId, String email, LocalDate birthDate) {
         int seed = Math.abs(awsId.hashCode());
         try {
@@ -53,6 +53,7 @@ public final class Fixtures {
             throw new IllegalStateException("The fixture user must be valid", exception);
         }
     }
+ **/
 
     public static DocumentFile document(User user) {
         return document(user, "documents/2026/10/03/id.pdf");

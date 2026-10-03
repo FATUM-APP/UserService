@@ -1,5 +1,7 @@
 package fatum.service;
 
+import fatum.dto.NewAddressRequest;
+import fatum.dto.UserUpdateRequest;
 import fatum.exception.FatumUserException;
 import fatum.model.User;
 import fatum.model.constant.UserRole;
@@ -119,15 +121,13 @@ public class UserService {
     @Transactional
     public User updateUser(
             String awsId,
-            String username,
-            String phoneNumber,
-            UserRole role,
-            String city) throws FatumUserException {
+            UserUpdateRequest request
+            ) throws FatumUserException {
 
         User existingUser = getUserById(awsId);
-        updateUsername(existingUser, username);
-        updatePhoneNumber(existingUser, phoneNumber);
-        updateRoleAndCity(existingUser, role, city);
+        updateUsername(existingUser, request.username());
+        updatePhoneNumber(existingUser, request.phoneNumber());
+        updateRoleAndAddress(existingUser, request.role(), request.newAddress());
         User saved = userRepository.save(existingUser);
         if (saved.getRole() == UserRole.PROFESSIONAL) {
             cognitoGroupService.grantProfessional(saved.getAwsId());
@@ -169,9 +169,9 @@ public class UserService {
         user.setPhoneNumber(phoneNumber);
     }
 
-    private void updateRoleAndCity(User user, UserRole role, String newCity)
+    private void updateRoleAndAddress(User user, UserRole role, NewAddressRequest newAddress)
             throws FatumUserException {
-        String city = normalize(newCity);
+        String residence = normalize(newAddress.residence());
         UserRole targetRole = role== null ? user.getRole() : role;
         String effectiveCity = city == null ? user.getCity() : city;
 
