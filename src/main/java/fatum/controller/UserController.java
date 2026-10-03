@@ -1,7 +1,7 @@
 package fatum.controller;
 
 import fatum.dto.*;
-import fatum.mapper.UserMapper;
+import fatum.dto.mapper.UserMapper;
 import fatum.exception.FatumUserException;
 import fatum.model.User;
 import fatum.model.constant.VerificationStatus;
@@ -16,7 +16,7 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 
-import static fatum.mapper.UserMapper.toResponse;
+import static fatum.dto.mapper.UserMapper.toResponse;
 
 @RestController
 @RequestMapping("/users")

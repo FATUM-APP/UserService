@@ -4,10 +4,12 @@ import fatum.dto.NewAddressRequest;
 import fatum.dto.TextNormalizer;
 import fatum.dto.UserUpdateRequest;
 import fatum.exception.FatumUserException;
-import fatum.mapper.AddressMapper;
+import fatum.dto.mapper.AddressMapper;
+import fatum.model.Address;
 import fatum.model.User;
 import fatum.model.constant.UserRole;
 import fatum.model.constant.VerificationStatus;
+import fatum.repository.AddressRepository;
 import fatum.repository.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,7 +23,9 @@ public class UserService {
     private final UserRepository userRepository;
     private final CognitoGroupService cognitoGroupService;
 
-    public UserService(UserRepository userRepository, CognitoGroupService cognitoGroupService) {
+    public UserService(UserRepository userRepository,
+                       CognitoGroupService cognitoGroupService
+    ) {
         this.userRepository = userRepository;
         this.cognitoGroupService = cognitoGroupService;
     }
@@ -177,10 +181,11 @@ public class UserService {
      * <p>The rule "a professional needs an address" is not repeated here: the entity owns it and
      * rejects the change with {@code PROFESSIONAL_CITY} when the account has none.</p>
      */
-    private void updateRoleAndAddress(User user, UserRole role, NewAddressRequest newAddress)
+    private void updateRoleAndAddress(User user, UserRole role, NewAddressRequest requestedAddress)
             throws FatumUserException {
-        if (newAddress != null) {
-            user.addAddress(AddressMapper.toEntity(newAddress, user));
+        Address newAddress = AddressMapper.toEntity(requestedAddress, user);
+        if (newAddress != null && !user.addressInList(newAddress)) {
+            user.addAddress(newAddress);
         }
         if (role != null) {
             user.setRole(role);

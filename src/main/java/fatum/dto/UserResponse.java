@@ -19,6 +19,7 @@ public record UserResponse(
         boolean isActive,
         String document,
         Gender gender,
-        DocumentType documentType
+        DocumentType documentType,
+        AddressDTO[] addresses
 ) {
 }

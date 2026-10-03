@@ -2,7 +2,7 @@ package fatum.support;
 
 import fatum.dto.NewAddressRequest;
 import fatum.exception.FatumUserException;
-import fatum.mapper.AddressMapper;
+import fatum.dto.mapper.AddressMapper;
 import fatum.model.Address;
 import fatum.model.DocumentFile;
 import fatum.model.ProfileImage;

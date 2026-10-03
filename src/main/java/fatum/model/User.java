@@ -55,7 +55,6 @@ public class User {
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
     private SequencedSet<Address> addressList;
 
-
     /**
      * Identity verification state. It replaces the former {@code isAuthenticated} boolean, which
      * could not express "the system could not decide, a human has to look at it".
@@ -117,6 +116,18 @@ public class User {
 
     public void makePrincipalAddress(Address address) {
         addressList.addFirst(address);
+    }
+
+    public Address getPrincipalAddress() {
+        return addressList.getFirst();
+    }
+
+    public boolean hasAddress() {
+        return !addressList.isEmpty();
+    }
+
+    public boolean addressInList(Address address) {
+        return addressList.contains(address);
     }
 
     public void setRole(UserRole newRole) throws FatumUserException {
