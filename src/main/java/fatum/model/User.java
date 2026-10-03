@@ -5,6 +5,7 @@ import fatum.model.constant.Country;
 import fatum.model.constant.DocumentType;
 import fatum.model.constant.Gender;
 import fatum.model.constant.UserRole;
+import fatum.model.constant.VerificationStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -18,7 +19,6 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
 import java.util.Locale;
-import java.util.Objects;
 
 @Entity
 @Table(name = "USERS")
@@ -26,6 +26,9 @@ import java.util.Objects;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @EqualsAndHashCode(onlyExplicitlyIncluded = true)
 public class User {
+
+    /** The widest value of {@link Gender} ("FEMALE") is six characters, not five. */
+    private static final int GENDER_COLUMN_LENGTH = 6;
 
     @Id
     @EqualsAndHashCode.Include
@@ -51,8 +54,16 @@ public class User {
     @Column(name = "ROLE", nullable = false, length = 20)
     private UserRole role = UserRole.CLIENT;
 
-    @Column(name = "IS_AUTHENTICATED", nullable = false)
-    private boolean isAuthenticated;
+    /**
+     * Identity verification state. It replaces the former {@code isAuthenticated} boolean, which
+     * could not express "the system could not decide, a human has to look at it".
+     *
+     * <p>The document pipeline is not running for now, so every account is born VERIFIED. The whole
+     * state machine stays in place so the feature can be switched back on without another migration.</p>
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "VERIFICATION_STATUS", nullable = false, length = 20)
+    private VerificationStatus verificationStatus = VerificationStatus.VERIFIED;
 
     @Column(name = "IS_ACTIVE", nullable = false)
     private boolean isActive;
@@ -61,8 +72,8 @@ public class User {
     private String document;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "GENDER", nullable = false, length = 5)
-    private Gender  gender;
+    @Column(name = "GENDER", nullable = false, length = GENDER_COLUMN_LENGTH)
+    private Gender gender;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "DOCUMENT_TYPE", nullable = false, length = 20)
@@ -94,7 +105,7 @@ public class User {
         setUsername(username);
         this.document = requireText(document);
         this.documentType = (DocumentType) validateNonNullObject(documentType);
-        this.isAuthenticated = false;
+        this.verificationStatus = VerificationStatus.VERIFIED;
         this.isActive = true;
         this.country = Country.COLOMBIA;
         this.gender = (Gender) validateNonNullObject(gender);
@@ -125,12 +136,21 @@ public class User {
         this.city = newCity == null || newCity.isBlank() ? null : newCity.trim();
     }
 
-    public boolean authenticate(boolean authenticated) throws FatumUserException {
-        if (authenticated && (document.isBlank() || documentType == null)) {
-            throw new FatumUserException(FatumUserException.DOCUMENT_NOT_AUTHENTICATED);
+    /**
+     * Records the identity verification state of the account.
+     *
+     * @param newStatus state to store; never null
+     * @throws FatumUserException when the state is missing
+     */
+    public void markVerificationStatus(VerificationStatus newStatus) throws FatumUserException {
+        if (newStatus == null) {
+            throw new FatumUserException(FatumUserException.NULL_VALUE);
         }
-        this.isAuthenticated = authenticated;
-        return authenticated;
+        this.verificationStatus = newStatus;
+    }
+
+    public boolean isVerified() {
+        return verificationStatus == VerificationStatus.VERIFIED;
     }
 
     public void deactivate() {

@@ -1,8 +1,8 @@
 package fatum.controller;
 
-import software.amazon.awssdk.core.exception.SdkException;
 import fatum.dto.ApiError;
 import fatum.exception.FatumUserException;
+import fatum.storage.StorageException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -29,6 +29,7 @@ public class GlobalExceptionHandler {
                  FatumUserException.FILE_NOT_FOUND -> HttpStatus.NOT_FOUND;
             case FatumUserException.INACTIVE,
                  FatumUserException.FORBIDDEN-> HttpStatus.FORBIDDEN;
+            case FatumUserException.COGNITO_GROUP_FAILURE -> HttpStatus.BAD_GATEWAY;
             case FatumUserException.USER_ALREADY_EXISTS,
                  FatumUserException.EMAIL_EXISTS,
                  FatumUserException.USERNAME_EXISTS,
@@ -78,9 +79,26 @@ public class GlobalExceptionHandler {
                 Map.of());
     }
 
-    @ExceptionHandler({IOException.class, SdkException.class})
-    public ResponseEntity<ApiError> handleStorageError(
-            Exception exception,
+    /**
+     * Failures of the shared storage service.
+     *
+     * <p>A rejected request keeps its 4xx, because the caller can fix it (wrong content type, file too
+     * large, unknown route). An outage of the storage backend is a 502: this service is healthy, its
+     * dependency is not.</p>
+     */
+    @ExceptionHandler(StorageException.class)
+    public ResponseEntity<ApiError> handleStorageFailure(
+            StorageException exception,
+            HttpServletRequest request) {
+        HttpStatus status = exception.isClientError()
+                ? HttpStatus.BAD_REQUEST
+                : HttpStatus.BAD_GATEWAY;
+        return buildError(status, exception.getMessage(), request.getRequestURI(), Map.of());
+    }
+
+    @ExceptionHandler(IOException.class)
+    public ResponseEntity<ApiError> handleIoError(
+            IOException exception,
             HttpServletRequest request) {
         return buildError(
                 HttpStatus.INTERNAL_SERVER_ERROR,

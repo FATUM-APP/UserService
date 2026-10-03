@@ -1,42 +1,73 @@
-# Fatum UserService — Java, Spring Boot y AWS S3
+# Fatum UserService — Java 25, Spring Boot y almacenamiento compartido
 
-Este microservicio utiliza Java 21, Spring Boot, PostgreSQL, Auth0 y Amazon S3. La API separa explícitamente **entidades JPA**, **DTOs HTTP**, **mapeo**, **reglas de negocio** y **persistencia**.
+Microservicio de usuarios de Fatum. Implementado con **Java 25**, **Spring Boot 3.5.3**,
+**PostgreSQL**, **Amazon Cognito** (JWT y grupos) y un **servicio de archivos compartido** en lugar de
+S3 directo.
 
-> Las entidades representan el estado persistente y las invariantes del dominio. Los DTOs definen el contrato JSON y concentran la validación de las peticiones.
+> Las entidades representan el estado persistente y las invariantes del dominio. Los DTOs definen el
+> contrato JSON y concentran la validación de las peticiones.
+
+## Alcance actual
+
+| Aspecto | Estado |
+| --- | --- |
+| Registro y perfil | Activo. El usuario envía sus datos y su foto de perfil |
+| Verificación de identidad | **No activa.** No hay Textract, Rekognition ni prueba de vida |
+| Estados de verificación | El enum completo se conserva, pero **toda cuenta nace `VERIFIED`** |
+| Documentos de identidad | Endpoints y tabla se conservan, apuntando al servicio de archivos. La tabla queda vacía porque la app no los llama |
+| Foto de perfil | Se reemplaza: se sube la nueva y se elimina la anterior |
 
 ## Arquitectura
 
 | Capa | Responsabilidad |
 | --- | --- |
-| `fatum.controller` | Recibe requests validados y devuelve response DTOs. No expone entidades JPA. |
-| `fatum.dto` | Define contratos de entrada/salida y contiene `UserMapper`. |
-| `fatum.service` | Aplica reglas, unicidad, transacciones e integración S3. |
-| `fatum.model` | Contiene entidades JPA y métodos de dominio, sin Jackson ni Bean Validation de transporte. |
-| `fatum.repository` | Ejecuta consultas mediante Spring Data JPA. |
-| `db/migration` | Versiona el esquema y sus restricciones con Flyway. |
+| `fatum.controller` | Recibe peticiones validadas y devuelve DTOs. No expone entidades JPA. Traduce los errores a HTTP en `GlobalExceptionHandler`. |
+| `fatum.dto` | Contratos de entrada/salida y `UserMapper`. |
+| `fatum.service` | Reglas de negocio, unicidad, transacciones y sincronización de grupos de Cognito. |
+| `fatum.model` | Entidades JPA y sus transiciones de estado. |
+| `fatum.repository` | Consultas mediante Spring Data JPA. |
+| `fatum.storage` | Cliente del servicio de archivos compartido (`FileStorageClient`) y unión de PDFs. |
+| `fatum.configuration` | Propiedades tipadas, CORS, seguridad y clientes de AWS. |
+| `db/migration` | Versiona el esquema con Flyway. |
 
-Las anotaciones `@NotBlank`, `@NotNull`, `@Email`, `@Past` y `@Size` están en los DTOs de entrada. Las entidades conservan `@Column`, `@Id`, `@OneToOne` y otras anotaciones JPA porque éstas describen la persistencia, no la serialización ni la validación HTTP.[1] [2]
+## Verificación
+
+`VerificationStatus` describe el estado de identidad de la cuenta:
+
+| Estado | Significado |
+| --- | --- |
+| `UNVERIFIED` | Nunca verificada, o el último intento quedó sin conclusión |
+| `VERIFIED` | El sistema o un administrador confirmó la identidad |
+| `REJECTED` | La evidencia contradice la identidad y no hay reintento |
+| `MANUAL_REVIEW` | Hace falta que un administrador decida |
+
+Hoy **no hay pipeline de verificación**, así que toda cuenta se crea en `VERIFIED` y el estado sólo se
+lee a través de `GET /users/me/authenticated`. El enum y la columna se mantienen para poder reactivar
+la funcionalidad sin otra migración.
 
 ## Contrato de usuario
 
-El alta requiere email, nombres, apellidos, teléfono, fecha de nacimiento, username, documento y tipo de documento. `document` y `documentType` son obligatorios desde la creación y no forman parte del DTO de actualización; por tanto, quedan inmutables en este servicio.
+El alta requiere email, nombre completo, teléfono, fecha de nacimiento, username, documento, tipo de
+documento y género. `document` y `documentType` son obligatorios desde la creación y no forman parte
+del DTO de actualización; quedan inmutables en este servicio.
 
 ### Creación
 
 ```json
 {
+  "awsId": "us-east-1:0a1b2c3d",
   "email": "user@example.com",
-  "names": "Camilo",
-  "surnames": "Castaño",
+  "name": "Camilo Castaño",
   "phoneNumber": "+573001112233",
   "birthDate": "1998-05-10",
   "username": "ccastano46",
   "document": "1000271422",
-  "documentType": "ID"
+  "documentType": "ID",
+  "gender": "MALE"
 }
 ```
 
-### Actualización parcial
+### Actualización
 
 ```json
 {
@@ -47,28 +78,26 @@ El alta requiere email, nombres, apellidos, teléfono, fecha de nacimiento, user
 }
 ```
 
-Los campos omitidos en la actualización no cambian. Los textos enviados explícitamente en blanco son rechazados por validación.
+Los campos omitidos no cambian. Un usuario `PROFESSIONAL` exige ciudad, y el cambio de rol lo añade
+**además** al grupo `PROFESSIONAL` de Cognito.
 
-## Respuesta pública
-
-Los controllers devuelven `UserResponse` y `ProfileImageResponse`. La entidad `ProfileImage` sólo persiste `id`, `imageKey` y su relación con `User`; la URL prefirmada se calcula en el servicio y se incorpora al DTO sin modificar la entidad.
+### Respuesta
 
 ```json
 {
-  "auth0Id": "auth0|123",
   "email": "user@example.com",
-  "names": "CAMILO",
-  "surnames": "CASTAÑO",
+  "name": "CAMILO CASTAÑO",
   "birthDate": "1998-05-10",
   "username": "ccastano46",
   "phoneNumber": "+573001112233",
   "role": "CLIENT",
-  "isAuthenticated": false,
+  "verificationStatus": "VERIFIED",
   "isActive": true,
   "document": "1000271422",
+  "gender": "MALE",
   "documentType": "ID",
   "city": null,
-  "profileImage": null
+  "country": "COLOMBIA"
 }
 ```
 
@@ -76,33 +105,73 @@ Los controllers devuelven `UserResponse` y `ProfileImageResponse`. La entidad `P
 
 | Método | Ruta | Autoridad | Resultado |
 | --- | --- | --- | --- |
-| `POST` | `/users` | JWT válido | Crea el usuario y devuelve `UserResponse`. |
-| `GET` | `/users/me` | JWT válido | Devuelve el usuario actual. |
-| `PUT` | `/users/me` | JWT válido | Actualiza únicamente campos mutables. |
-| `PUT` | `/users/me/profile-image` | JWT válido | Reemplaza la imagen mediante multipart. |
-| `GET` | `/users/me/authenticated` | JWT válido | Consulta `isAuthenticated`. |
-| `DELETE` | `/users/me` | JWT válido | Desactiva lógicamente el usuario. |
-| `GET` | `/users/active?email=...` | `read:users` | Consulta actividad por email. |
-| `GET` | `/users/search?names=...&surnames=...` | `read:users` | Busca por nombres y apellidos. |
-| `GET` | `/users/username/{username}` | `read:users` | Busca por username. |
+| `POST` | `/users/validate-signup` | Pública | Valida el alta sin persistirla |
+| `POST` | `/users/register` | Cabecera `Lambda-Secret` | Crea la cuenta y la une al grupo `VERIFIED` |
+| `GET` | `/users/me` | JWT válido | Devuelve la cuenta actual |
+| `PUT` | `/users/update` | JWT válido | Actualiza los campos mutables |
+| `GET` | `/users/me/authenticated` | JWT válido | Devuelve `verificationStatus` y `isVerified` |
+| `PUT` | `/users/deactivate` | JWT válido | Desactiva lógicamente la cuenta |
+| `PUT` | `/profile-image/update` | JWT válido | Reemplaza la foto de perfil (`multipart`, campo `image`) |
+| `GET` | `/profile-image` | JWT válido | Devuelve la foto actual con una URL temporal |
+| `POST` | `/documents/upload` | JWT válido | Sube un documento (`multipart`, campos `type`, `front`, `back`) |
+| `POST` | `/documents/upload/single` | JWT válido | Sube un PDF ya escaneado (`multipart`, campo `file`) |
+| `GET` | `/documents` | JWT válido | Devuelve el documento de la cuenta |
+
+Los errores de dominio se traducen a HTTP en `GlobalExceptionHandler`: `404` si la cuenta o el archivo
+no existen, `409` si hay conflicto con un valor único y `403` cuando la acción no está permitida.
+
+## Grupos de Cognito
+
+| Momento | Grupo |
+| --- | --- |
+| Al crear la cuenta | `VERIFIED` |
+| Al pasar a `PROFESSIONAL` | `PROFESSIONAL` (además del anterior) |
+
+Si Cognito falla, el registro **no** se cae: la cuenta ya quedó en la base de datos y el error se
+registra en el log. Con `COGNITO_STRICT=true` la petición sí falla, para entornos donde el grupo es
+parte del contrato.
+
+## Almacenamiento de archivos
+
+Este servicio **no conoce buckets**. Llama al `fatum-file-service` indicando una ruta y ese servicio
+decide el bucket, el prefijo y las validaciones:
+
+| Ruta | Uso |
+| --- | --- |
+| `user-service:profile-image` | Fotos de perfil |
+| `user-service:document` | Documentos de identidad (imagen o PDF) |
+
+El servicio de usuarios guarda la clave del objeto; la URL de descarga se firma en el momento de
+responder. Si el servicio de archivos rechaza la petición el cliente recibe `400`; si no responde,
+`502`.
+
+## Pruebas y cobertura
+
+```bash
+./mvnw test      # ejecuta las pruebas y escribe target/site/jacoco/index.html
+./mvnw verify    # además aplica la regla de cobertura
+```
+
+JaCoCo mide **únicamente el paquete `fatum.service`**, que es donde viven las reglas de negocio. DTOs,
+entidades, repositorios, adaptadores, configuración y controladores quedan fuera de la medición. La
+regla de aceptación es:
+
+| Métrica | Mínimo |
+| --- | --- |
+| Líneas cubiertas | 70 % |
+| Ramas cubiertas | 60 % |
 
 ## Persistencia y migraciones
 
-Flyway administra el esquema y Hibernate usa `ddl-auto=validate` por defecto.[3] La migración `V1` crea un esquema nuevo. La migración `V2` revisa bases existentes y falla con un mensaje claro si hay filas sin username, documento o tipo de documento antes de aplicar `NOT NULL`.
+Flyway administra el esquema y Hibernate usa `ddl-auto=validate` por defecto.
 
-Antes de desplegar sobre una base con datos históricos, identifique y complete los usuarios afectados:
-
-```sql
-SELECT auth0_id, username, document, document_type
-FROM users
-WHERE username IS NULL
-   OR BTRIM(username) = ''
-   OR document IS NULL
-   OR BTRIM(document) = ''
-   OR document_type IS NULL;
-```
-
-No se asignan documentos ficticios automáticamente porque son datos de identidad y requieren una decisión de negocio.
+| Versión | Contenido |
+| --- | --- |
+| `V1` | Tabla `users` |
+| `V2` | Tabla `profile_images` |
+| `V3` | Tabla `document_files` |
+| `V4` | Reemplaza `is_authenticated` por `verification_status` y ensancha `gender` a `VARCHAR(6)` |
+| `V5` | Ensancha las claves de almacenamiento a `VARCHAR(512)` |
 
 ## Variables de entorno
 
@@ -111,12 +180,15 @@ No se asignan documentos ficticios automáticamente porque son datos de identida
 | `DB_URL` | URL JDBC de PostgreSQL. | `jdbc:postgresql://localhost:5432/fatum_users` |
 | `DB_USERNAME` | Usuario de PostgreSQL. | `postgres` |
 | `DB_PASSWORD` | Contraseña de PostgreSQL. | `postgres` |
-| `AUTH0_DOMAIN` | Dominio Auth0 sin protocolo. | `tenant.us.auth0.com` |
-| `AUTH0_AUDIENCE` | Audience de Auth0. | `https://api.fatum.example` |
-| `AWS_REGION` | Región del bucket S3. | `us-east-1` |
-| `AWS_S3_BUCKET` | Bucket privado de imágenes. | `fatum-profile-images` |
-| `JPA_DDL_AUTO` | Validación Hibernate. | `validate` |
-| `FLYWAY_ENABLED` | Activa migraciones al arrancar. | `true` |
+| `USER_POOL_ID` | Pool de usuarios de Cognito. | `us-east-1_9qUKvpTsS` |
+| `LAMBDA_SECRET` | Secreto que protege `/users/register`. | *(secreto)* |
+| `AWS_REGION` | Región de AWS. | `us-east-1` |
+| `FILE_SERVICE_URL` | URL base del servicio de archivos. | `http://localhost:8081` |
+| `FILE_SERVICE_SECRET` | Secreto compartido (`X-Storage-Key`). | *(vacío en local)* |
+| `COGNITO_GROUPS_ENABLED` | Activa la sincronización de grupos. | `true` |
+| `COGNITO_STRICT` | Falla el registro si Cognito falla. | `false` |
+| `JPA_DDL_AUTO` | Validación de Hibernate. | `validate` |
+| `FLYWAY_ENABLED` | Migraciones al arrancar. | `true` |
 | `CORS_ALLOWED_ORIGINS` | Orígenes permitidos. | `http://localhost:5173` |
 | `PORT` | Puerto HTTP. | `8080` |
 
@@ -126,9 +198,11 @@ No se asignan documentos ficticios automáticamente porque son datos de identida
 ./mvnw clean verify
 ```
 
+El `Dockerfile` incluido construye la imagen del servicio para Cloud Run o cualquier contenedor.
+
 ## Referencias
 
 [1]: https://jakarta.ee/specifications/bean-validation/3.0/jakarta-bean-validation-spec-3.0.html "Jakarta Bean Validation 3.0"
 [2]: https://jakarta.ee/specifications/persistence/3.1/jakarta-persistence-spec-3.1 "Jakarta Persistence 3.1"
 [3]: https://documentation.red-gate.com/flyway/flyway-concepts/migrations "Flyway migrations"
-[4]: https://gitlab.com/ccastano46-group/userservicejava.git "userservicejava"
+[4]: https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-pools-user-groups.html "Cognito user pool groups"

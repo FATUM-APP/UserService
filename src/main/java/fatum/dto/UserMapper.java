@@ -4,8 +4,6 @@ import fatum.exception.FatumUserException;
 import fatum.model.User;
 import org.springframework.stereotype.Component;
 
-import java.util.Objects;
-
 @Component
 public class UserMapper {
 
@@ -35,7 +33,7 @@ public class UserMapper {
                 user.getUsername(),
                 user.getPhoneNumber(),
                 user.getRole(),
-                user.isAuthenticated(),
+                user.getVerificationStatus(),
                 user.isActive(),
                 user.getDocument(),
                 user.getGender(),

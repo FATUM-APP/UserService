@@ -23,6 +23,9 @@ public class FatumUserException extends Exception {
     public static final String INVALID_DOCUMENT_TYPE = "Only PDF and image document files are allowed";
     public static final String FORBIDDEN = "You are not allowed to perform this action";
 
+    /** The account could not be added to its Cognito group and strict mode is enabled. */
+    public static final String COGNITO_GROUP_FAILURE = "The Cognito group could not be updated";
+
     public FatumUserException(String message) {
         super(message);
     }

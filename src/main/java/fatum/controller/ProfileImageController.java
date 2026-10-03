@@ -15,8 +15,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.IOException;
-
 @RestController
 @RequestMapping("/profile-image")
 public class ProfileImageController {
@@ -32,7 +30,7 @@ public class ProfileImageController {
     public ResponseEntity<StoredFileResponse> replace(
             @AuthenticationPrincipal Jwt jwt,
             @RequestParam("image") MultipartFile image)
-            throws FatumUserException, IOException {
+            throws FatumUserException {
         return ResponseEntity.ok(profileImageService.replace(jwt.getSubject(), image));
     }
 

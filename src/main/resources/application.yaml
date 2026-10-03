@@ -33,12 +33,31 @@ server:
 
 aws:
   region: ${AWS_REGION:us-east-1}
-  s3:
-    profile-images-bucket: ${AWS_S3_PROFILE_IMAGES_BUCKET}
-    documents-bucket: ${AWS_S3_DOCUMENTS_BUCKET}
   cognito:
     user-pool-id: ${USER_POOL_ID}
 
+# ------------------------------------------------------------------------------------------------
+# Shared storage microservice. This service no longer talks to S3: it names a route and the storage
+# service decides which bucket receives the object.
+# ------------------------------------------------------------------------------------------------
+fatum:
+  file-service:
+    base-url: ${FILE_SERVICE_URL:http://localhost:8081}
+    internal-secret: ${FILE_SERVICE_SECRET:}
+    connect-timeout: ${FILE_SERVICE_CONNECT_TIMEOUT:2s}
+    read-timeout: ${FILE_SERVICE_READ_TIMEOUT:20s}
+    profile-image-route: ${FILE_SERVICE_PROFILE_IMAGE_ROUTE:user-service:profile-image}
+    document-route: ${FILE_SERVICE_DOCUMENT_ROUTE:user-service:document}
+
+  # Groups are the contract the rest of the platform reads, so their names are configuration.
+  cognito:
+    enabled: ${COGNITO_GROUPS_ENABLED:true}
+    user-pool-id: ${USER_POOL_ID:}
+    verified-group: ${COGNITO_VERIFIED_GROUP:VERIFIED}
+    professional-group: ${COGNITO_PROFESSIONAL_GROUP:PROFESSIONAL}
+    use-subject-as-username: ${COGNITO_USE_SUB_AS_USERNAME:false}
+    # A Cognito outage must not fail a sign-up the database already recorded.
+    strict: ${COGNITO_STRICT:false}
 
 app:
   cors:

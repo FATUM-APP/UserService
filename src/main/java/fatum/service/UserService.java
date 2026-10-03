@@ -3,6 +3,7 @@ package fatum.service;
 import fatum.exception.FatumUserException;
 import fatum.model.User;
 import fatum.model.constant.UserRole;
+import fatum.model.constant.VerificationStatus;
 import fatum.repository.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,14 +15,25 @@ import java.util.List;
 public class UserService {
 
     private final UserRepository userRepository;
+    private final CognitoGroupService cognitoGroupService;
 
-    public UserService(UserRepository userRepository) {
+    public UserService(UserRepository userRepository, CognitoGroupService cognitoGroupService) {
         this.userRepository = userRepository;
+        this.cognitoGroupService = cognitoGroupService;
     }
 
+    /**
+     * Stores a new account.
+     *
+     * <p>Every account is born VERIFIED, so it joins the verified group of the user pool at the same
+     * moment it is created. The document pipeline is not running for now, which is why there is no
+     * verification step in between.</p>
+     */
     @Transactional
-    public User createUser(User newUser)  {
-        return userRepository.save(newUser);
+    public User createUser(User newUser) throws FatumUserException {
+        User saved = userRepository.save(newUser);
+        cognitoGroupService.grantVerified(saved.getAwsId());
+        return saved;
     }
 
     public void validateUser(User user) throws FatumUserException {
@@ -98,6 +110,12 @@ public class UserService {
         return userRepository.findByNameIgnoreCase(normalize(name));
     }
 
+    /**
+     * Applies the editable fields of an account and keeps the user pool in sync.
+     *
+     * <p>Becoming a professional also adds the account to the professional group, which is the
+     * contract the rest of the platform reads. The call is idempotent in Cognito.</p>
+     */
     @Transactional
     public User updateUser(
             String awsId,
@@ -110,7 +128,11 @@ public class UserService {
         updateUsername(existingUser, username);
         updatePhoneNumber(existingUser, phoneNumber);
         updateRoleAndCity(existingUser, role, city);
-        return userRepository.save(existingUser);
+        User saved = userRepository.save(existingUser);
+        if (saved.getRole() == UserRole.PROFESSIONAL) {
+            cognitoGroupService.grantProfessional(saved.getAwsId());
+        }
+        return saved;
     }
 
     @Transactional
@@ -120,8 +142,8 @@ public class UserService {
         userRepository.save(user);
     }
 
-    public boolean userIsAuthenticated(String awsId) throws FatumUserException {
-        return getUserById(awsId).isAuthenticated();
+    public VerificationStatus getVerificationStatus(String awsId) throws FatumUserException {
+        return getUserById(awsId).getVerificationStatus();
     }
 
     public boolean isUserActiveByEmail(String email) throws FatumUserException {

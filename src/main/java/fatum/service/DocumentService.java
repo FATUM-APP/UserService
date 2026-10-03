@@ -7,38 +7,43 @@ import fatum.model.User;
 import fatum.model.constant.DocumentType;
 import fatum.repository.DocumentFileRepository;
 import fatum.repository.UserRepository;
+import fatum.storage.FileStorageClient;
+import fatum.storage.FileStorageProperties;
 import fatum.storage.PdfMerger;
-import fatum.storage.S3FileStorage;
-import fatum.storage.StoredObject;
-import org.springframework.beans.factory.annotation.Value;
+import fatum.storage.StoredFile;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 
+/**
+ * Identity documents of an account.
+ *
+ * <p>The document pipeline is not part of the current sign-up flow, so this table stays empty for
+ * now. The endpoints are kept and already work against the shared storage service, which means
+ * switching the feature back on is a client change and not a release here.</p>
+ */
 @Service
 public class DocumentService {
 
-    private static final String OBJECT_PREFIX = "documents";
-
     private final UserRepository userRepository;
     private final DocumentFileRepository documentFileRepository;
-    private final S3FileStorage storage;
+    private final FileStorageClient storage;
+    private final FileStorageProperties storageProperties;
     private final PdfMerger pdfMerger;
-    private final String bucketName;
 
     public DocumentService(
             UserRepository userRepository,
             DocumentFileRepository documentFileRepository,
-            S3FileStorage storage,
-            PdfMerger pdfMerger,
-            @Value("${aws.s3.documents-bucket}") String bucketName) {
+            FileStorageClient storage,
+            FileStorageProperties storageProperties,
+            PdfMerger pdfMerger) {
         this.userRepository = userRepository;
         this.documentFileRepository = documentFileRepository;
         this.storage = storage;
+        this.storageProperties = storageProperties;
         this.pdfMerger = pdfMerger;
-        this.bucketName = bucketName;
     }
 
     /**
@@ -86,12 +91,11 @@ public class DocumentService {
             mergedFilename = documentType.name().toLowerCase() + ".pdf";
         }
 
-        StoredObject uploaded = storage.upload(
+        StoredFile uploaded = storage.upload(
                 pdfBytes,
-                bucketName,
-                OBJECT_PREFIX,
                 mergedFilename,
-                "application/pdf");
+                "application/pdf",
+                storageProperties.getDocumentRoute());
 
         try {
             DocumentFile document = new DocumentFile(
@@ -104,7 +108,7 @@ public class DocumentService {
             DocumentFile saved = documentFileRepository.save(document);
             return toResponse(saved);
         } catch (RuntimeException exception) {
-            storage.delete(bucketName, uploaded.key());
+            storage.delete(storageProperties.getDocumentRoute(), uploaded.key());
             throw exception;
         }
     }
@@ -138,12 +142,11 @@ public class DocumentService {
 
         String safeFilename = documentType.name().toLowerCase() + ".pdf";
 
-        StoredObject uploaded = storage.upload(
+        StoredFile uploaded = storage.upload(
                 file.getBytes(),
-                bucketName,
-                OBJECT_PREFIX,
                 safeFilename,
-                "application/pdf");
+                "application/pdf",
+                storageProperties.getDocumentRoute());
 
         try {
             DocumentFile document = new DocumentFile(
@@ -156,7 +159,7 @@ public class DocumentService {
             DocumentFile saved = documentFileRepository.save(document);
             return toResponse(saved);
         } catch (RuntimeException exception) {
-            storage.delete(bucketName, uploaded.key());
+            storage.delete(storageProperties.getDocumentRoute(), uploaded.key());
             throw exception;
         }
     }
@@ -175,7 +178,7 @@ public class DocumentService {
                 document.getOriginalFilename(),
                 document.getContentType(),
                 document.getFileSize(),
-                storage.presignedDownloadUrl(bucketName, document.getDocumentKey()),
+                storage.presignedUrl(storageProperties.getDocumentRoute(), document.getDocumentKey()),
                 document.getCreatedAt(),
                 document.getUpdatedAt());
     }

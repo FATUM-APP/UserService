@@ -7,6 +7,7 @@ import fatum.dto.UserStatusResponse;
 import fatum.dto.UserUpdateRequest;
 import fatum.exception.FatumUserException;
 import fatum.model.User;
+import fatum.model.constant.VerificationStatus;
 import fatum.service.UserService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -79,8 +80,9 @@ public class UserController {
     @GetMapping("/me/authenticated")
     public ResponseEntity<UserStatusResponse> isCurrentUserAuthenticated(
             @AuthenticationPrincipal Jwt jwt) throws FatumUserException {
-        boolean authenticated = userService.userIsAuthenticated(jwt.getSubject());
-        return ResponseEntity.status(HttpStatus.OK).body(new UserStatusResponse(authenticated));
+        VerificationStatus status = userService.getVerificationStatus(jwt.getSubject());
+        return ResponseEntity.status(HttpStatus.OK)
+                .body(new UserStatusResponse(status, status == VerificationStatus.VERIFIED));
     }
 
     @PutMapping("/deactivate")
