@@ -54,6 +54,10 @@ public class UserController {
                 .body(toResponse(userService.createUser(request)));
     }
 
+    /**
+     * The account of the token, whether it is active or not: the caller is already authenticated and
+     * hiding somebody from themselves protects nothing.
+     */
     @GetMapping("/me")
     public ResponseEntity<UserResponse> getCurrentUser(@AuthenticationPrincipal Jwt jwt)
             throws FatumUserException {
@@ -62,24 +66,30 @@ public class UserController {
                 .body(toResponse(userService.getUserById(awsId)));
     }
 
-    @GetMapping
+    /**
+     * The three lookups below answer about other accounts, so they only hand out the ones that are
+     * active: a deactivated account is refused with {@code INACTIVE} instead of shown. The
+     * administrative view of the same lookups lives in {@code AdminUserController}.
+     */
+    @GetMapping("/by-username")
     public ResponseEntity<UserResponse> getUserByUsername(@RequestParam("username") String username)
             throws FatumUserException {
         return ResponseEntity.status(HttpStatus.OK)
-                .body(toResponse(userService.getUserByUsername(username)));
+                .body(toResponse(userService.getActiveUserByUsername(username)));
     }
 
-    @GetMapping
-    public ResponseEntity<UserResponse> getUserByEmail(@RequestParam("email") String email) throws FatumUserException {
-        return ResponseEntity.status(HttpStatus.OK)
-                .body(toResponse(userService.getUserByEmail(email)));
-    }
-
-    @GetMapping
-    public  ResponseEntity<List<UserResponse>> getUsersByName(@RequestParam("name") String name)
+    @GetMapping("/by-email")
+    public ResponseEntity<UserResponse> getUserByEmail(@RequestParam("email") String email)
             throws FatumUserException {
         return ResponseEntity.status(HttpStatus.OK)
-                .body(toResponseList(userService.getUsersByName(name)));
+                .body(toResponse(userService.getActiveUserByEmail(email)));
+    }
+
+    @GetMapping("/search")
+    public ResponseEntity<List<UserResponse>> getUsersByName(@RequestParam("name") String name)
+            throws FatumUserException {
+        return ResponseEntity.status(HttpStatus.OK)
+                .body(toResponseList(userService.getActiveUsersByName(name)));
     }
 
     @GetMapping("/verification-status")
@@ -101,12 +111,8 @@ public class UserController {
             @AuthenticationPrincipal Jwt jwt,
             @Valid @RequestBody UserUpdateRequest request) throws FatumUserException {
         String awsId = jwt.getSubject();
-        User user = userService.updateUser(awsId, request);
-
         return ResponseEntity.status(HttpStatus.OK)
                 .body(toResponse(userService.updateUser(awsId, request)));
     }
-
-
 
 }

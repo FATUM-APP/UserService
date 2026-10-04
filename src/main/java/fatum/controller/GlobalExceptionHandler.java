@@ -8,6 +8,7 @@ import jakarta.validation.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -105,6 +106,24 @@ public class GlobalExceptionHandler {
         return buildError(
                 HttpStatus.INTERNAL_SERVER_ERROR,
                 "Error processing the stored file",
+                request.getRequestURI(),
+                Map.of());
+    }
+
+    /**
+     * A refusal of the method security is a permission problem, not a server failure.
+     *
+     * <p>Without this handler the generic branch below would answer 500, which hides the real reason
+     * from the caller and from the logs. It also covers the refusal the filter chain raises on the
+     * routes only an administrator may reach.</p>
+     */
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ApiError> handleAccessDenied(
+            AccessDeniedException exception,
+            HttpServletRequest request) {
+        return buildError(
+                HttpStatus.FORBIDDEN,
+                FatumUserException.FORBIDDEN,
                 request.getRequestURI(),
                 Map.of());
     }

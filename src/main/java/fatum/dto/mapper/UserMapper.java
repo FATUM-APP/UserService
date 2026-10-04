@@ -34,8 +34,8 @@ public class UserMapper {
     public static UserResponse toResponse(User user)  {
         if (user == null) return null;
 
-        AddressDTO[] addresses = user.getAddressList().stream()
-                .map(address -> AddressMapper.toDTO(address, user.getName()))
+        AddressDTO[] addresses = AddressMapper
+                .toDTOList(user.getAddressList(), user.getName())
                 .toArray(AddressDTO[]::new);
 
         return new UserResponse(

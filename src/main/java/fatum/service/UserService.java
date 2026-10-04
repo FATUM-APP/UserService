@@ -200,7 +200,52 @@ public class UserService {
      * @return list of users
      */
     public List<User> getUsersByName(String name) {
+        return userRepository.findByNameIgnoreCase(TextNormalizer.trimOrNull(name));
+    }
+
+    /**
+     * Lists the accounts with the given name that still have access.
+     *
+     * <p>This is what the public directory shows. The split matters: the queries the business rules
+     * use (a duplicated email, a duplicated username) read the repository directly, so they keep
+     * seeing deactivated accounts and cannot hand a taken value to a new sign-up.</p>
+     */
+    public List<User> getActiveUsersByName(String name) {
         return userRepository.findByNameIgnoreCaseAndIsActive(TextNormalizer.trimOrNull(name), true);
+    }
+
+    /**
+     * Reads an account that any authenticated user may see.
+     *
+     * <p>The difference with {@link #getUserById(String)} is what happens with a deactivated
+     * account: it is not hidden as if it did not exist, it is refused with {@code INACTIVE}, so the
+     * caller knows the account is there but has no access. A missing one is still a
+     * {@code USER_NOT_FOUND}.</p>
+     *
+     * @param awsId identifier of the account
+     * @return the account, always active
+     * @throws FatumUserException if the account does not exist or was deactivated
+     */
+    public User getActiveUserById(String awsId) throws FatumUserException {
+        return requireActive(getUserById(awsId));
+    }
+
+    /** Reads an active account by its email. @see #getActiveUserById(String) */
+    public User getActiveUserByEmail(String email) throws FatumUserException {
+        return requireActive(getUserByEmail(email));
+    }
+
+    /** Reads an active account by its username. @see #getActiveUserById(String) */
+    public User getActiveUserByUsername(String username) throws FatumUserException {
+        return requireActive(getUserByUsername(username));
+    }
+
+    /** Refuses an account that was deactivated, whatever way it was found. */
+    private User requireActive(User user) throws FatumUserException {
+        if (!user.isActive()) {
+            throw new FatumUserException(FatumUserException.INACTIVE);
+        }
+        return user;
     }
 
     public VerificationStatus getVerificationStatus(String email) throws FatumUserException {
@@ -517,6 +562,29 @@ public class UserService {
         user.deactivate();
         User saved = userRepository.save(user);
         cognitoUserService.revokeAccess(saved.getAwsId());
+    }
+
+    /**
+     * Gives the account back the access a deactivation took away.
+     *
+     * <p>It mirrors {@link #deactivateUser(String)}: the database goes first and the user pool
+     * after. The groups are restored as well, because revoking the access empties them, and an
+     * account without its group loses the permissions the rest of the platform reads from the
+     * token.</p>
+     *
+     * @param email email of the account
+     * @throws FatumUserException if the account does not exist
+     */
+    @Transactional
+    public void activateUser(String email) throws FatumUserException {
+        User user = getUserByEmail(email);
+        user.activate();
+        User saved = userRepository.save(user);
+        cognitoUserService.enableUser(saved.getAwsId());
+        cognitoGroupService.grantVerified(saved.getAwsId());
+        if (saved.getRole() == UserRole.PROFESSIONAL) {
+            cognitoGroupService.grantProfessional(saved.getAwsId());
+        }
     }
 
 }

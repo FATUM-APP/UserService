@@ -180,6 +180,17 @@ public class User {
         this.isActive = false;
     }
 
+    /**
+     * Gives the account its access back.
+     *
+     * <p>It only flips the local flag: restoring the access in the user pool belongs to whoever
+     * reactivates, and the service does it right after saving, the same way it revokes it when the
+     * account is deactivated.</p>
+     */
+    public void activate() {
+        this.isActive = true;
+    }
+
     private Object validateNonNullObject(Object value) throws FatumUserException {
         if (value == null) throw new FatumUserException(FatumUserException.NULL_VALUE);
         return value;
@@ -216,7 +227,6 @@ public class User {
         }
     }
 }
-
 
 
 

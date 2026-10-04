@@ -254,28 +254,62 @@ class UserServiceTest {
     }
 
     @Test
-    void findsAnAccountByPhoneNumber() throws FatumUserException {
-        User existing = Fixtures.user();
-        when(userRepository.findByPhoneNumber(existing.getPhoneNumber())).thenReturn(existing);
+    void searchesByNameOverEveryAccount() {
+        List<User> expected = List.of(Fixtures.user());
+        when(userRepository.findByNameIgnoreCase("Jane Doe")).thenReturn(expected);
 
-        assertThat(service.getUserByPhoneNumber(existing.getPhoneNumber())).isSameAs(existing);
+        assertThat(service.getUsersByName(" Jane Doe ")).isEqualTo(expected);
+    }
+
+    // ------------------------------------------------------- visibility by active state
+
+    @Test
+    void thePublicDirectoryOnlyListsActiveAccounts() {
+        List<User> expected = List.of(Fixtures.user());
+        when(userRepository.findByNameIgnoreCaseAndIsActive("Jane Doe", true)).thenReturn(expected);
+
+        assertThat(service.getActiveUsersByName(" Jane Doe ")).isEqualTo(expected);
     }
 
     @Test
-    void anUnknownPhoneNumberIsReported() {
-        when(userRepository.findByPhoneNumber("+570000000000")).thenReturn(null);
+    void anActiveAccountIsVisibleToOtherUsers() throws FatumUserException {
+        User existing = Fixtures.user();
+        when(userRepository.findByAwsId(USER_ID)).thenReturn(existing);
 
-        assertThatThrownBy(() -> service.getUserByPhoneNumber("+570000000000"))
+        assertThat(service.getActiveUserById(USER_ID)).isSameAs(existing);
+    }
+
+    @Test
+    void aDeactivatedAccountIsRefusedInsteadOfHidden() {
+        User existing = Fixtures.user();
+        existing.deactivate();
+        when(userRepository.findByAwsId(USER_ID)).thenReturn(existing);
+
+        assertThatThrownBy(() -> service.getActiveUserById(USER_ID))
+                .isInstanceOf(FatumUserException.class)
+                .hasMessage(FatumUserException.INACTIVE);
+    }
+
+    @Test
+    void anUnknownAccountIsStillNotFound() {
+        when(userRepository.findByEmailIgnoreCase("ghost@fatum.com")).thenReturn(null);
+
+        assertThatThrownBy(() -> service.getActiveUserByEmail("ghost@fatum.com"))
                 .isInstanceOf(FatumUserException.class)
                 .hasMessage(FatumUserException.USER_NOT_FOUND);
     }
 
     @Test
-    void searchesByName() {
-        List<User> expected = List.of(Fixtures.user());
-        when(userRepository.findByNameIgnoreCase("Jane Doe")).thenReturn(expected);
+    void aDeactivatedAccountIsStillVisibleToTheBusinessRules() {
+        User deactivated = Fixtures.user("aws-user-2");
+        deactivated.deactivate();
+        User candidate = Fixtures.userWithEmail("aws-user-3", deactivated.getEmail());
+        when(userRepository.findByAwsId(candidate.getAwsId())).thenReturn(null);
+        when(userRepository.findByEmailIgnoreCase(deactivated.getEmail())).thenReturn(deactivated);
 
-        assertThat(service.getUsersByName(" Jane Doe ")).isEqualTo(expected);
+        assertThatThrownBy(() -> service.validateUser(candidate))
+                .isInstanceOf(FatumUserException.class)
+                .hasMessage(FatumUserException.EMAIL_EXISTS);
     }
 
     // -------------------------------------------------------------------- update
@@ -421,11 +455,43 @@ class UserServiceTest {
     }
 
     @Test
+    void activatingAnAccountGivesTheAccessBack() throws FatumUserException {
+        User existing = Fixtures.user();
+        existing.deactivate();
+        when(userRepository.findByEmailIgnoreCase(existing.getEmail())).thenReturn(existing);
+        when(userRepository.save(existing)).thenReturn(existing);
+
+        service.activateUser(existing.getEmail());
+
+        assertThat(existing.isActive()).isTrue();
+        verify(userRepository).save(existing);
+        verify(cognitoUserService).enableUser(USER_ID);
+        verify(cognitoGroupService).grantVerified(USER_ID);
+    }
+
+    @Test
+    void activatingAProfessionalRestoresBothGroups() throws FatumUserException {
+        User existing = Fixtures.user();
+        existing.addAddress(Fixtures.address(existing));
+        existing.setRole(UserRole.PROFESSIONAL);
+        existing.deactivate();
+        when(userRepository.findByEmailIgnoreCase(existing.getEmail())).thenReturn(existing);
+        when(userRepository.save(existing)).thenReturn(existing);
+
+        service.activateUser(existing.getEmail());
+
+        verify(cognitoUserService).enableUser(USER_ID);
+        verify(cognitoGroupService).grantVerified(USER_ID);
+        verify(cognitoGroupService).grantProfessional(USER_ID);
+    }
+
+    @Test
     void reportsTheVerificationStatus() throws FatumUserException {
         User existing = Fixtures.user();
-        when(userRepository.findByAwsId(USER_ID)).thenReturn(existing);
+        when(userRepository.findByEmailIgnoreCase(existing.getEmail())).thenReturn(existing);
 
-        assertThat(service.getVerificationStatus(USER_ID)).isEqualTo(VerificationStatus.VERIFIED);
+        assertThat(service.getVerificationStatus(existing.getEmail()))
+                .isEqualTo(VerificationStatus.VERIFIED);
     }
 
     @Test
