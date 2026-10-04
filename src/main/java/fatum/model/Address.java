@@ -11,8 +11,8 @@ import lombok.NoArgsConstructor;
         name = "ADDRESSES",
         uniqueConstraints = {
                 @UniqueConstraint(
-                        name = "UK_USER_RESIDENCE",
-                        columnNames = {"USER_USERNAME", "RESIDENCE"}
+                        name = "UK_USER_ALIAS",
+                        columnNames = {"USER_AWS_ID", "ALIAS"}
                 )
         }
 )
@@ -43,7 +43,7 @@ public class Address {
     private String country;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "USER_USERNAME", referencedColumnName = "USERNAME", nullable = false)
+    @JoinColumn(name = "USER_AWS_ID", referencedColumnName = "AWS_ID", nullable = false)
     private User user;
 
     public Address(String address, String alias, String city, String country, User user, String state) {

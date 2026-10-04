@@ -407,15 +407,15 @@ public class UserService {
     /**
      * Moves one address to the head of the list, which is what makes it the principal one.
      *
-     * @param awsId     identifier of the account
-     * @param residence residence that identifies the address
+     * @param awsId identifier of the account
+     * @param alias name that identifies the address inside the account
      * @return the address that is principal now
      * @throws FatumUserException if the user or the address does not exist
      */
     @Transactional
-    public Address makePrincipalAddress(String awsId, String residence) throws FatumUserException {
+    public Address makePrincipalAddress(String awsId, String alias) throws FatumUserException {
         User user = getUserById(awsId);
-        Address address = findAddress(user, residence);
+        Address address = findAddress(user, alias);
         user.makePrincipalAddress(address);
         userRepository.save(user);
         return address;
@@ -424,19 +424,20 @@ public class UserService {
     /**
      * Adds an address to the account.
      *
-     * <p>The pair (username, residence) is unique in the table, so the address is checked before it
-     * reaches the list: a constraint violation would tell the caller nothing about what went wrong.</p>
+     * <p>The pair (aws identifier, alias) is unique in the table, so the alias is checked before the
+     * address reaches the list: a constraint violation would tell the caller nothing about what went
+     * wrong.</p>
      *
      * @param awsId   identifier of the account
      * @param request address to store
      * @return the stored address
-     * @throws FatumUserException if the user does not exist or already has an address with that residence
+     * @throws FatumUserException if the user does not exist or already has an address with that alias
      */
     @Transactional
     public Address addAddress(String awsId, NewAddressRequest request) throws FatumUserException {
         User user = getUserById(awsId);
         Address address = toNewAddress(request, user);
-        ensureResidenceIsFree(user, address.getResidence());
+        ensureAliasIsFree(user, address.getAlias());
         user.addAddress(address);
         addressRepository.save(address);
         userRepository.save(user);
@@ -456,26 +457,36 @@ public class UserService {
     }
 
     /**
-     * Finds one address of the account by its residence.
+     * Finds one address of the account by its alias.
      *
-     * @param userName     identifier of the account
-     * @param alias residence that identifies the address
+     * @param awsId identifier of the account
+     * @param alias name that identifies the address inside the account
      * @return the stored address
      * @throws FatumUserException if the user or the address does not exist
      */
     @Transactional(readOnly = true)
-    public Address getAddress(String userName, String alias) throws FatumUserException {
-        return findAddress(getActiveUserByUsername(userName), alias);
+    public Address getAddress(String awsId, String alias) throws FatumUserException {
+        return findAddress(getUserById(awsId), alias);
     }
 
+    /**
+     * The address of a professional, looked up by the username.
+     *
+     * <p>It is the only address read by username, and it cannot be otherwise: the caller is another
+     * account, which knows the username it saw in a listing and never the aws identifier.</p>
+     *
+     * @param username username of the professional
+     * @return the address that represents the professional
+     * @throws FatumUserException if the account does not exist, is not active or is not a professional
+     */
     @Transactional(readOnly = true)
-    public Address getProfffessionalAddress(String email) throws FatumUserException {
-        User profesional = getActiveUserByEmail(email);
-        if(profesional.getRole() != UserRole.PROFESSIONAL) throw new FatumUserException(FatumUserException.NO_PROFESSIONAL);
-        return getPrincipalAddress(profesional.getAwsId());
+    public Address getProfessionalAddress(String username) throws FatumUserException {
+        User professional = getActiveUserByUsername(username);
+        if (professional.getRole() != UserRole.PROFESSIONAL) {
+            throw new FatumUserException(FatumUserException.NO_PROFESSIONAL);
+        }
+        return getPrincipalAddress(professional.getAwsId());
     }
-
-
     /**
      * Replaces one address of the account with another one.
      *
@@ -484,23 +495,23 @@ public class UserService {
      * without an address, so adding first keeps that rule from firing on a replacement. When the
      * replaced address was the principal one, the new one takes its place at the head of the list.</p>
      *
-     * @param awsId     identifier of the account
-     * @param residence residence that identifies the address to replace
-     * @param request   new values of the address
+     * @param awsId   identifier of the account
+     * @param alias   alias that identifies the address to replace
+     * @param request new values of the address
      * @return the stored address
-     * @throws FatumUserException if the user or the address does not exist, or the new residence is
+     * @throws FatumUserException if the user or the address does not exist, or the new alias is
      *                            already used by another address of the same account
      */
     @Transactional
-    public Address updateAddress(String awsId, String residence, NewAddressRequest request)
+    public Address updateAddress(String awsId, String alias, NewAddressRequest request)
             throws FatumUserException {
         User user = getUserById(awsId);
-        Address current = findAddress(user, residence);
+        Address current = findAddress(user, alias);
         Address replacement = toNewAddress(request, user);
-        if (!replacement.getResidence().equals(current.getResidence())) {
-            ensureResidenceIsFree(user, replacement.getResidence());
+        if (!replacement.getAlias().equals(current.getAlias())) {
+            ensureAliasIsFree(user, replacement.getAlias());
         }
-        boolean wasPrincipal = user.getPrincipalAddress().getResidence().equals(current.getResidence());
+        boolean wasPrincipal = user.getPrincipalAddress().getAlias().equals(current.getAlias());
         if (wasPrincipal) {
             user.makePrincipalAddress(replacement);
         } else {
@@ -519,34 +530,35 @@ public class UserService {
      * {@code removeAddress} rejects the deletion of the last address. The row disappears with the
      * collection, because the association is declared with {@code orphanRemoval}.</p>
      *
-     * @param awsId     identifier of the account
-     * @param residence residence that identifies the address
+     * @param awsId identifier of the account
+     * @param alias alias that identifies the address
      * @throws FatumUserException if the user or the address does not exist, or it is the last address
      *                            of a professional account
      */
     @Transactional
-    public void removeAddress(String awsId, String residence) throws FatumUserException {
+    public void removeAddress(String awsId, String alias) throws FatumUserException {
         User user = getUserById(awsId);
-        user.removeAddress(findAddress(user, residence));
+        user.removeAddress(findAddress(user, alias));
         userRepository.save(user);
     }
 
     /**
-     * Finds an address of the account by its residence.
+     * Finds an address of the account by its alias.
      *
-     * <p>The lookup goes to the table instead of scanning the loaded collection: the residence is
-     * stored folded to lower case and the pair (username, residence) is what the unique index covers.</p>
+     * <p>The lookup goes to the table instead of scanning the loaded collection: the pair (aws
+     * identifier, alias) is what the unique index covers, and that is also what guarantees the query
+     * returns one row instead of two.</p>
      */
     private Address findAddress(User user, String alias) throws FatumUserException {
         requireActive(user);
-        Address address = addressRepository.findByUserUsernameAndAlias(user.getUsername(),alias);
+        Address address = addressRepository.findByUserAwsIdAndAlias(user.getAwsId(), alias);
         if(address == null) throw new FatumUserException(FatumUserException.ADDRESS_NOT_FOUND);
         return address;
     }
 
-    /** Rejects a residence the account is already using. */
-    private void ensureResidenceIsFree(User user, String alias) throws FatumUserException {
-        if (addressRepository.existsByUserUsernameAndAlias(user.getUsername(), alias)) {
+    /** Rejects an alias the account is already using. */
+    private void ensureAliasIsFree(User user, String alias) throws FatumUserException {
+        if (addressRepository.existsByUserAwsIdAndAlias(user.getAwsId(), alias)) {
             throw new FatumUserException(FatumUserException.ADDRESS_EXISTS);
         }
     }
