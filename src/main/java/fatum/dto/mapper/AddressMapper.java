@@ -36,7 +36,7 @@ public class AddressMapper {
      * <p>The principal flag is a parameter because only the caller knows where the address sits
      * inside the account: the entity stores the order, not the flag.</p>
      */
-    public static AddressDTO toDTO(Address address, String user, boolean principal) {
+    public static AddressDTO toDTO(Address address, String user) {
 
         return address != null ?new AddressDTO(
                 address.getResidence(),
@@ -44,8 +44,7 @@ public class AddressMapper {
                 address.getCity(),
                 address.getState(),
                 address.getCountry(),
-                user,
-                principal) : null;
+                user) : null;
     }
 
     /**
@@ -55,10 +54,6 @@ public class AddressMapper {
      * the principal address and there is no need to look it up again.</p>
      */
     public static List<AddressDTO> toDTOList(List<Address> addresses, String user) {
-        List<AddressDTO> result = new ArrayList<>(addresses.size());
-        for (int index = 0; index < addresses.size(); index++) {
-            result.add(toDTO(addresses.get(index), user, index == 0));
-        }
-        return result;
+        return addresses.stream().map(AddressMapper::toDTO).toList();
     }
 }

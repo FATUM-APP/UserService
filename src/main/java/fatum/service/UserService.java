@@ -21,6 +21,7 @@ import software.amazon.awssdk.services.cognitoidentityprovider.endpoints.interna
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 public class UserService {
@@ -229,6 +230,7 @@ public class UserService {
     public User getActiveUserById(String awsId) throws FatumUserException {
         return requireActive(getUserById(awsId));
     }
+
 
     /** Reads an active account by its email. @see #getActiveUserById(String) */
     public User getActiveUserByEmail(String email) throws FatumUserException {
@@ -456,15 +458,23 @@ public class UserService {
     /**
      * Finds one address of the account by its residence.
      *
-     * @param awsId     identifier of the account
-     * @param residence residence that identifies the address
+     * @param userName     identifier of the account
+     * @param alias residence that identifies the address
      * @return the stored address
      * @throws FatumUserException if the user or the address does not exist
      */
     @Transactional(readOnly = true)
-    public Address getAddress(String awsId, String residence) throws FatumUserException {
-        return findAddress(getUserById(awsId), residence);
+    public Address getAddress(String userName, String alias) throws FatumUserException {
+        return findAddress(getActiveUserByUsername(userName), alias);
     }
+
+    @Transactional(readOnly = true)
+    public Address getProfffessionalAddress(String email) throws FatumUserException {
+        User profesional = getActiveUserByEmail(email);
+        if(profesional.getRole() != UserRole.PROFESSIONAL) throw new FatumUserException(FatumUserException.NO_PROFESSIONAL);
+        return getPrincipalAddress(profesional.getAwsId());
+    }
+
 
     /**
      * Replaces one address of the account with another one.
@@ -527,15 +537,16 @@ public class UserService {
      * <p>The lookup goes to the table instead of scanning the loaded collection: the residence is
      * stored folded to lower case and the pair (username, residence) is what the unique index covers.</p>
      */
-    private Address findAddress(User user, String residence) throws FatumUserException {
-        return addressRepository
-                .findByUserUsernameAndResidence(user.getUsername(), TextNormalizer.lower(residence))
-                .orElseThrow(() -> new FatumUserException(FatumUserException.ADDRESS_NOT_FOUND));
+    private Address findAddress(User user, String alias) throws FatumUserException {
+        requireActive(user);
+        Address address = addressRepository.findByUserUsernameAndAlias(user.getUsername(),alias);
+        if(address == null) throw new FatumUserException(FatumUserException.ADDRESS_NOT_FOUND);
+        return address;
     }
 
     /** Rejects a residence the account is already using. */
-    private void ensureResidenceIsFree(User user, String residence) throws FatumUserException {
-        if (addressRepository.existsByUserUsernameAndResidence(user.getUsername(), residence)) {
+    private void ensureResidenceIsFree(User user, String alias) throws FatumUserException {
+        if (addressRepository.existsByUserUsernameAndAlias(user.getUsername(), alias)) {
             throw new FatumUserException(FatumUserException.ADDRESS_EXISTS);
         }
     }

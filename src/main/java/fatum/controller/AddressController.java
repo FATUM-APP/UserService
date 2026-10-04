@@ -25,7 +25,7 @@ import java.util.List;
  * brings spaces and an almohadilla that do not belong in a path.</p>
  */
 @RestController
-@RequestMapping("/users/me/addresses")
+@RequestMapping("/users/addresses")
 @Validated
 public class AddressController {
 
@@ -36,7 +36,7 @@ public class AddressController {
     }
 
     /** Every address of the account, the principal one first. */
-    @GetMapping
+    @GetMapping("/mine")
     public ResponseEntity<List<AddressDTO>> listAddresses(@AuthenticationPrincipal Jwt jwt)
             throws FatumUserException {
         return ResponseEntity.status(HttpStatus.OK)
@@ -51,7 +51,23 @@ public class AddressController {
                 .body(toDTO(userService.getPrincipalAddress(jwt.getSubject())));
     }
 
-    @PostMapping
+    @GetMapping("/select")
+    public ResponseEntity<AddressDTO> selectAddress(@AuthenticationPrincipal Jwt jwt,
+                                                    @RequestParam("alias") String alias)
+            throws FatumUserException {
+        return ResponseEntity.status(HttpStatus.OK)
+                .body(toDTO(userService.getPrincipalAddress(jwt.getSubject())));
+    }
+
+    /** The address that represents the account. */
+    @GetMapping("/professional-address")
+    public ResponseEntity<AddressDTO> getProfessionalPrincipal(@RequestParam("email") String email)
+            throws FatumUserException {
+        return ResponseEntity.status(HttpStatus.OK)
+                .body(toDTO(userService.getProfffessionalAddress(email)));
+    }
+
+    @PostMapping()
     public ResponseEntity<AddressDTO> addAddress(
             @AuthenticationPrincipal Jwt jwt,
             @Valid @RequestBody NewAddressRequest request) throws FatumUserException {
@@ -91,11 +107,7 @@ public class AddressController {
     }
 
     private AddressDTO toDTO(Address address) {
-        return AddressMapper.toDTO(address, address.getUser().getName(), isPrincipal(address));
+        return AddressMapper.toDTO(address, address.getUser().getName());
     }
 
-    /** The first address of the account is the principal one. */
-    private boolean isPrincipal(Address address) {
-        return address.getUser().getPrincipalAddress().getResidence().equals(address.getResidence());
-    }
 }

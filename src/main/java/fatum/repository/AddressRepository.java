@@ -10,8 +10,8 @@ import java.util.Optional;
 public interface AddressRepository extends JpaRepository<Address, String> {
 
     // 1. Obtener la dirección si existe
-    Optional<Address> findByUserUsernameAndResidence(String username, String residence);
+    Address findByUserUsernameAndAlias(String username, String alias);
 
     // 2. Comprobar existencia rápida (SELECT 1) antes de guardar
-    boolean existsByUserUsernameAndResidence(String username, String residence);
+    boolean existsByUserUsernameAndAlias(String username, String alias);
 }

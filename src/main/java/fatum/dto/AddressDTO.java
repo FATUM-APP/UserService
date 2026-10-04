@@ -13,7 +13,6 @@ public record AddressDTO(
         String city,
         String state,
         String country,
-        String userName,
-        boolean principal
+        String userName
 ) {
 }

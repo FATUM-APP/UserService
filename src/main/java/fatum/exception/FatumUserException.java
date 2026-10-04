@@ -14,6 +14,7 @@ public class FatumUserException extends Exception {
     public static final String ADDRESS_EXISTS = "The user already has an address with that residence";
     public static final String USERNAME_EXISTS = "A user with that username already exists";
     public static final String PHONE_EXISTS = "A user with that phone number already exists";
+    public static final String NO_PROFESSIONAL = "User is not a professional";
     public static final String UNDERAGE_USER = "User must be at least 18 years old";
     public static final String DOCUMENT_EXISTS = "A user with that document already exists";
     public static final String DOCUMENT_NOT_AUTHENTICATED = "Document is null or has no type";
