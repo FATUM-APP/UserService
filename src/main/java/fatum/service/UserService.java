@@ -329,24 +329,139 @@ public class UserService {
         }
     }
 
-    public Address addAddress(String awsId, NewAddressRequest newAddress) throws FatumUserException {
-        User user = getUserById(awsId);
-        Address address = AddressMapper.toEntity(newAddress, user);
-        user.addAddress(address);
-        Address saved = addressRepository.save(address);
-        userRepository.save(user);
-        return saved;
+     //================================================================================================================
+     //                                              ADDRESS
+     //===============================================================================================================
 
+
+    /**
+     * Adds an address to the account.
+     *
+     * <p>The pair (username, residence) is unique in the table, so the address is checked before it
+     * reaches the list: a constraint violation would tell the caller nothing about what went wrong.</p>
+     *
+     * @param awsId   identifier of the account
+     * @param request address to store
+     * @return the stored address
+     * @throws FatumUserException if the user does not exist or already has an address with that residence
+     */
+    @Transactional
+    public Address addAddress(String awsId, NewAddressRequest request) throws FatumUserException {
+        User user = getUserById(awsId);
+        Address address = toNewAddress(request, user);
+        ensureResidenceIsFree(user, address.getResidence());
+        user.addAddress(address);
+        addressRepository.save(address);
+        userRepository.save(user);
+        return address;
     }
 
-    public Address removeAddress(String awsId, NewAddressRequest newAddress) throws FatumUserException {
-        User user = getUserById(awsId);
-        Address address = AddressMapper.toEntity(newAddress, user);
-        user.addAddress(address);
-        Address saved = addressRepository.save(address);
-        userRepository.save(user);
-        return saved;
+    /**
+     * Lists the addresses of the account. The first one is the principal address.
+     *
+     * @param awsId identifier of the account
+     * @return the addresses, in order
+     * @throws FatumUserException if the user does not exist
+     */
+    @Transactional(readOnly = true)
+    public List<Address> getAddresses(String awsId) throws FatumUserException {
+        return List.copyOf(getUserById(awsId).getAddressList());
+    }
 
+    /**
+     * Finds one address of the account by its residence.
+     *
+     * @param awsId     identifier of the account
+     * @param residence residence that identifies the address
+     * @return the stored address
+     * @throws FatumUserException if the user or the address does not exist
+     */
+    @Transactional(readOnly = true)
+    public Address getAddress(String awsId, String residence) throws FatumUserException {
+        return findAddress(getUserById(awsId), residence);
+    }
+
+    /**
+     * Replaces one address of the account with another one.
+     *
+     * <p>The entity has no setters, so updating is adding the new address and removing the old one,
+     * and the order is not cosmetic: {@code removeAddress} refuses to leave a professional account
+     * without an address, so adding first keeps that rule from firing on a replacement. When the
+     * replaced address was the principal one, the new one takes its place at the head of the list.</p>
+     *
+     * @param awsId     identifier of the account
+     * @param residence residence that identifies the address to replace
+     * @param request   new values of the address
+     * @return the stored address
+     * @throws FatumUserException if the user or the address does not exist, or the new residence is
+     *                            already used by another address of the same account
+     */
+    @Transactional
+    public Address updateAddress(String awsId, String residence, NewAddressRequest request)
+            throws FatumUserException {
+        User user = getUserById(awsId);
+        Address current = findAddress(user, residence);
+        Address replacement = toNewAddress(request, user);
+        if (!replacement.getResidence().equals(current.getResidence())) {
+            ensureResidenceIsFree(user, replacement.getResidence());
+        }
+        boolean wasPrincipal = user.getPrincipalAddress().getResidence().equals(current.getResidence());
+        if (wasPrincipal) {
+            user.makePrincipalAddress(replacement);
+        } else {
+            user.addAddress(replacement);
+        }
+        user.removeAddress(current);
+        addressRepository.save(replacement);
+        userRepository.save(user);
+        return replacement;
+    }
+
+    /**
+     * Deletes one address of the account.
+     *
+     * <p>The rule that protects a professional account is not repeated here: the entity owns it and
+     * {@code removeAddress} rejects the deletion of the last address. The row disappears with the
+     * collection, because the association is declared with {@code orphanRemoval}.</p>
+     *
+     * @param awsId     identifier of the account
+     * @param residence residence that identifies the address
+     * @throws FatumUserException if the user or the address does not exist, or it is the last address
+     *                            of a professional account
+     */
+    @Transactional
+    public void removeAddress(String awsId, String residence) throws FatumUserException {
+        User user = getUserById(awsId);
+        user.removeAddress(findAddress(user, residence));
+        userRepository.save(user);
+    }
+
+    /**
+     * Finds an address of the account by its residence.
+     *
+     * <p>The lookup goes to the table instead of scanning the loaded collection: the residence is
+     * stored folded to lower case and the pair (username, residence) is what the unique index covers.</p>
+     */
+    private Address findAddress(User user, String residence) throws FatumUserException {
+        return addressRepository
+                .findByUserUsernameAndResidence(user.getUsername(), TextNormalizer.lower(residence))
+                .orElseThrow(() -> new FatumUserException(FatumUserException.ADDRESS_NOT_FOUND));
+    }
+
+    /** Rejects a residence the account is already using. */
+    private void ensureResidenceIsFree(User user, String residence) throws FatumUserException {
+        if (addressRepository.existsByUserUsernameAndResidence(user.getUsername(), residence)) {
+            throw new FatumUserException(FatumUserException.ADDRESS_EXISTS);
+        }
+    }
+
+    /** Builds the entity, and refuses a request that carries no address. */
+    private Address toNewAddress(NewAddressRequest request, User user) throws FatumUserException {
+        Address address = AddressMapper.toEntity(request, user);
+        if (address == null) {
+            throw new FatumUserException(FatumUserException.NULL_VALUE);
+        }
+        return address;
     }
 
     /**

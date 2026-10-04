@@ -26,7 +26,8 @@ public class GlobalExceptionHandler {
             HttpServletRequest request) {
         HttpStatus status = switch (exception.getMessage()) {
             case FatumUserException.USER_NOT_FOUND,
-                 FatumUserException.FILE_NOT_FOUND -> HttpStatus.NOT_FOUND;
+                 FatumUserException.FILE_NOT_FOUND,
+                 FatumUserException.ADDRESS_NOT_FOUND -> HttpStatus.NOT_FOUND;
             case FatumUserException.INACTIVE,
                  FatumUserException.FORBIDDEN-> HttpStatus.FORBIDDEN;
             case FatumUserException.COGNITO_GROUP_FAILURE -> HttpStatus.BAD_GATEWAY;
@@ -34,7 +35,8 @@ public class GlobalExceptionHandler {
                  FatumUserException.EMAIL_EXISTS,
                  FatumUserException.USERNAME_EXISTS,
                  FatumUserException.PHONE_EXISTS,
-                 FatumUserException.DOCUMENT_EXISTS -> HttpStatus.CONFLICT;
+                 FatumUserException.DOCUMENT_EXISTS,
+                 FatumUserException.ADDRESS_EXISTS -> HttpStatus.CONFLICT;
             default -> HttpStatus.BAD_REQUEST;
         };
         return buildError(status, exception.getMessage(), request.getRequestURI(), Map.of());
