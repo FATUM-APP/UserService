@@ -3,9 +3,12 @@ package fatum.dto;
 /**
  * An address as the client sees it.
  *
- * <p>{@code principal} is derived, not stored: the collection is kept ordered and the first element
- * is the principal address, so the flag is computed while mapping. It travels explicitly because
- * "the first one of the array" is a contract nobody documents.</p>
+ * <p>There is no flag for the principal address on purpose: the addresses are stored ordered and the
+ * first one is the principal one, so the position already says it and a field would only be a copy
+ * that can disagree with the order.</p>
+ *
+ * <p>{@code userName} names the account the address belongs to, so a component that renders a list
+ * can show whose address it is.</p>
  */
 public record AddressDTO(
         String residence,

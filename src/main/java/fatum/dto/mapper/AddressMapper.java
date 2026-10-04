@@ -5,7 +5,6 @@ import fatum.dto.NewAddressRequest;
 import fatum.model.Address;
 import fatum.model.User;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -33,8 +32,9 @@ public class AddressMapper {
     /**
      * Maps one address.
      *
-     * <p>The principal flag is a parameter because only the caller knows where the address sits
-     * inside the account: the entity stores the order, not the flag.</p>
+     * @param address the stored address
+     * @param user    name of the account the address belongs to
+     * @return the address as the client sees it, or {@code null} when there is no address
      */
     public static AddressDTO toDTO(Address address, String user) {
 
@@ -48,12 +48,15 @@ public class AddressMapper {
     }
 
     /**
-     * Maps a whole list, marking the first one as the principal.
+     * Maps a whole list without touching the order.
      *
-     * <p>The order is the contract here: the collection is stored ordered, so the first element is
-     * the principal address and there is no need to look it up again.</p>
+     * <p>The order is the contract: the collection is stored ordered and the first element is the
+     * principal address, so this method never sorts nor filters. An address that cannot be mapped
+     * keeps its place as {@code null} for the same reason.</p>
      */
     public static List<AddressDTO> toDTOList(List<Address> addresses, String user) {
-        return addresses.stream().map(AddressMapper::toDTO).toList();
+        return addresses.stream()
+                .map(address -> toDTO(address, user))
+                .toList();
     }
 }
