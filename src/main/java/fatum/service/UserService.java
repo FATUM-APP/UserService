@@ -335,6 +335,39 @@ public class UserService {
 
 
     /**
+     * Returns the principal address of the account, that is, the first one of the list.
+     *
+     * @param awsId identifier of the account
+     * @return the principal address
+     * @throws FatumUserException if the user does not exist or has no address
+     */
+    @Transactional(readOnly = true)
+    public Address getPrincipalAddress(String awsId) throws FatumUserException {
+        User user = getUserById(awsId);
+        if (!user.hasAddress()) {
+            throw new FatumUserException(FatumUserException.ADDRESS_NOT_FOUND);
+        }
+        return user.getPrincipalAddress();
+    }
+
+    /**
+     * Moves one address to the head of the list, which is what makes it the principal one.
+     *
+     * @param awsId     identifier of the account
+     * @param residence residence that identifies the address
+     * @return the address that is principal now
+     * @throws FatumUserException if the user or the address does not exist
+     */
+    @Transactional
+    public Address makePrincipalAddress(String awsId, String residence) throws FatumUserException {
+        User user = getUserById(awsId);
+        Address address = findAddress(user, residence);
+        user.makePrincipalAddress(address);
+        userRepository.save(user);
+        return address;
+    }
+
+    /**
      * Adds an address to the account.
      *
      * <p>The pair (username, residence) is unique in the table, so the address is checked before it

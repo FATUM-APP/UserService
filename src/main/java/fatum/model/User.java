@@ -124,7 +124,16 @@ public class User {
         addressList.remove(address);
     }
 
+    /**
+     * Moves an address to the head of the list, which is what makes it the principal one.
+     *
+     * <p>Removing it first is not decorative: {@code List.addFirst} inserts, so passing an address
+     * that is already in the list would add a second copy of it instead of moving it. A set could
+     * not hold the duplicate and the move was implicit; the collection is a list now, so the move
+     * is written step by step.</p>
+     */
     public void makePrincipalAddress(Address address) {
+        addressList.remove(address);
         addressList.addFirst(address);
     }
 
