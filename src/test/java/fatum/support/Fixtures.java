@@ -1,5 +1,6 @@
 package fatum.support;
 
+import fatum.dto.CreateUserRequest;
 import fatum.dto.NewAddressRequest;
 import fatum.exception.FatumUserException;
 import fatum.dto.mapper.AddressMapper;
@@ -56,6 +57,25 @@ public final class Fixtures {
         } catch (FatumUserException exception) {
             throw new IllegalStateException("The fixture user must be valid", exception);
         }
+    }
+
+    /** The same account, as the client sends it when signing up. */
+    public static CreateUserRequest createRequest() {
+        return createRequest(USER_ID);
+    }
+
+    public static CreateUserRequest createRequest(String awsId) {
+        User user = user(awsId);
+        return new CreateUserRequest(
+                user.getAwsId(),
+                user.getEmail(),
+                user.getName(),
+                user.getPhoneNumber(),
+                user.getBirthDate(),
+                user.getUsername(),
+                user.getDocument(),
+                user.getDocumentType(),
+                user.getGender());
     }
 
     /** An address as the client sends it; the record normalises it on the way in. */

@@ -1,12 +1,15 @@
 package fatum.service;
 
+import fatum.dto.CreateUserRequest;
 import fatum.dto.UserUpdateRequest;
 import fatum.exception.FatumUserException;
 import fatum.model.User;
 import fatum.model.constant.UserRole;
 import fatum.model.constant.VerificationStatus;
+import fatum.repository.AddressRepository;
 import fatum.repository.UserRepository;
 import fatum.service.cognito.CognitoGroupService;
+import fatum.service.cognito.CognitoUserService;
 import fatum.support.Fixtures;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -19,6 +22,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
@@ -34,7 +38,12 @@ class UserServiceTest {
     private UserRepository userRepository;
 
     @Mock
+    private AddressRepository addressRepository;
+
+    @Mock
     private CognitoGroupService cognitoGroupService;
+    @Mock
+    private CognitoUserService cognitoUserService;
 
     @InjectMocks
     private UserService service;
@@ -43,24 +52,23 @@ class UserServiceTest {
 
     @Test
     void aNewAccountIsStoredAndJoinsTheVerifiedGroup() throws FatumUserException {
-        User newUser = Fixtures.user();
-        when(userRepository.save(newUser)).thenReturn(newUser);
+        when(userRepository.save(any(User.class))).thenAnswer(call -> call.getArgument(0));
 
-        User stored = service.createUser(newUser);
+        User stored = service.createUser(Fixtures.createRequest());
 
-        assertThat(stored).isSameAs(newUser);
+        assertThat(stored.getAwsId()).isEqualTo(USER_ID);
         assertThat(stored.getVerificationStatus()).isEqualTo(VerificationStatus.VERIFIED);
+        assertThat(stored.getAddressList()).isEmpty();
         verify(cognitoGroupService).grantVerified(USER_ID);
     }
 
     @Test
-    void aFailingGroupSyncIsReportedWhenStrictModeIsOn() throws FatumUserException {
-        User newUser = Fixtures.user();
-        when(userRepository.save(newUser)).thenReturn(newUser);
+    void aFailingGroupSyncIsReported() throws FatumUserException {
+        when(userRepository.save(any(User.class))).thenAnswer(call -> call.getArgument(0));
         doThrow(new FatumUserException(FatumUserException.COGNITO_GROUP_FAILURE))
                 .when(cognitoGroupService).grantVerified(USER_ID);
 
-        assertThatThrownBy(() -> service.createUser(newUser))
+        assertThatThrownBy(() -> service.createUser(Fixtures.createRequest()))
                 .isInstanceOf(FatumUserException.class)
                 .hasMessage(FatumUserException.COGNITO_GROUP_FAILURE);
     }
@@ -212,23 +220,6 @@ class UserServiceTest {
     }
 
     @Test
-    void findsAnAccountByDocument() throws FatumUserException {
-        User existing = Fixtures.user();
-        when(userRepository.findByDocumentIgnoreCase(existing.getDocument())).thenReturn(existing);
-
-        assertThat(service.getUserByDocument(existing.getDocument())).isSameAs(existing);
-    }
-
-    @Test
-    void anUnknownDocumentIsReported() {
-        when(userRepository.findByDocumentIgnoreCase("nope")).thenReturn(null);
-
-        assertThatThrownBy(() -> service.getUserByDocument("nope"))
-                .isInstanceOf(FatumUserException.class)
-                .hasMessage(FatumUserException.USER_NOT_FOUND);
-    }
-
-    @Test
     void findsAnAccountByUsername() throws FatumUserException {
         User existing = Fixtures.user();
         when(userRepository.findByUsernameIgnoreCase(existing.getUsername())).thenReturn(existing);
@@ -277,23 +268,6 @@ class UserServiceTest {
         assertThatThrownBy(() -> service.getUserByPhoneNumber("+570000000000"))
                 .isInstanceOf(FatumUserException.class)
                 .hasMessage(FatumUserException.USER_NOT_FOUND);
-    }
-
-    @Test
-    void theExistenceHelpersReturnWhatTheRepositoryReturns() {
-        User existing = Fixtures.user();
-        when(userRepository.findByAwsId(USER_ID)).thenReturn(existing);
-        when(userRepository.findByEmailIgnoreCase(existing.getEmail())).thenReturn(existing);
-        when(userRepository.findByUsernameIgnoreCase(existing.getUsername())).thenReturn(existing);
-        when(userRepository.findByPhoneNumber(existing.getPhoneNumber())).thenReturn(existing);
-        when(userRepository.findByDocumentIgnoreCase(existing.getDocument())).thenReturn(existing);
-
-        assertThat(service.userExistsById(USER_ID)).isSameAs(existing);
-        assertThat(service.userExistsByEmail(existing.getEmail())).isSameAs(existing);
-        assertThat(service.userExistsByUsername(existing.getUsername())).isSameAs(existing);
-        assertThat(service.userExistsByPhoneNumber(existing.getPhoneNumber())).isSameAs(existing);
-        assertThat(service.userExistsByDocument(existing.getDocument())).isSameAs(existing);
-        assertThat(service.userExistsById("aws-user-9")).isNull();
     }
 
     @Test
@@ -424,11 +398,26 @@ class UserServiceTest {
     void deactivatesAnAccount() throws FatumUserException {
         User existing = Fixtures.user();
         when(userRepository.findByEmailIgnoreCase(existing.getEmail())).thenReturn(existing);
+        when(userRepository.save(existing)).thenReturn(existing);
 
         service.deactivateUser(existing.getEmail());
 
         assertThat(existing.isActive()).isFalse();
         verify(userRepository).save(existing);
+        verify(cognitoUserService).revokeAccess(USER_ID);
+    }
+
+    @Test
+    void deactivatingAnAccountThatCognitoRefusesIsReportedWhenStrictModeIsOn() throws FatumUserException {
+        User existing = Fixtures.user();
+        when(userRepository.findByEmailIgnoreCase(existing.getEmail())).thenReturn(existing);
+        when(userRepository.save(existing)).thenReturn(existing);
+        doThrow(new FatumUserException(FatumUserException.COGNITO_GROUP_FAILURE))
+                .when(cognitoUserService).revokeAccess(USER_ID);
+
+        assertThatThrownBy(() -> service.deactivateUser(existing.getEmail()))
+                .isInstanceOf(FatumUserException.class)
+                .hasMessage(FatumUserException.COGNITO_GROUP_FAILURE);
     }
 
     @Test

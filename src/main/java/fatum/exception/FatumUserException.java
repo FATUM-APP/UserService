@@ -10,6 +10,8 @@ public class FatumUserException extends Exception {
     public static final String USER_ALREADY_EXISTS = "User already exists";
     public static final String EMAIL_EXISTS = "A user with that email already exists";
     public static final String PROFESSIONAL_CITY = "If user is professional, city must be set";
+    public static final String ADDRESS_NOT_FOUND = "Address not found";
+    public static final String ADDRESS_EXISTS = "The user already has an address with that residence";
     public static final String USERNAME_EXISTS = "A user with that username already exists";
     public static final String PHONE_EXISTS = "A user with that phone number already exists";
     public static final String UNDERAGE_USER = "User must be at least 18 years old";

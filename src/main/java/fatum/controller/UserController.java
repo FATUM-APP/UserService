@@ -16,7 +16,10 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 
+import java.util.List;
+
 import static fatum.dto.mapper.UserMapper.toResponse;
+import static fatum.dto.mapper.UserMapper.toResponseList;
 
 @RestController
 @RequestMapping("/users")
@@ -47,16 +50,50 @@ public class UserController {
             @RequestHeader("Lambda-Secret") String receivedSecret
             ) throws FatumUserException {
         if (!lambdaSecret.equals(receivedSecret)) throw new FatumUserException(FatumUserException.FORBIDDEN);
-        User newUser = UserMapper.toEntity(request);
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(toResponse(userService.createUser(newUser)));
+                .body(toResponse(userService.createUser(request)));
     }
 
     @GetMapping("/me")
     public ResponseEntity<UserResponse> getCurrentUser(@AuthenticationPrincipal Jwt jwt)
             throws FatumUserException {
         String awsId = jwt.getSubject();
-        return ResponseEntity.ok(toResponse(userService.getUserById(awsId)));
+        return ResponseEntity.status(HttpStatus.OK)
+                .body(toResponse(userService.getUserById(awsId)));
+    }
+
+    @GetMapping
+    public ResponseEntity<UserResponse> getUserByUsername(@RequestParam("username") String username)
+            throws FatumUserException {
+        return ResponseEntity.status(HttpStatus.OK)
+                .body(toResponse(userService.getUserByUsername(username)));
+    }
+
+    @GetMapping
+    public ResponseEntity<UserResponse> getUserByEmail(@RequestParam("email") String email) throws FatumUserException {
+        return ResponseEntity.status(HttpStatus.OK)
+                .body(toResponse(userService.getUserByEmail(email)));
+    }
+
+    @GetMapping
+    public  ResponseEntity<List<UserResponse>> getUsersByName(@RequestParam("name") String name)
+            throws FatumUserException {
+        return ResponseEntity.status(HttpStatus.OK)
+                .body(toResponseList(userService.getUsersByName(name)));
+    }
+
+    @GetMapping("/verification-status")
+    public ResponseEntity<VerificationStatus> getVerificationStatus(@RequestParam("email") String email)
+            throws FatumUserException {
+        return ResponseEntity.status(HttpStatus.OK)
+                .body(userService.getVerificationStatus(email));
+    }
+
+    @GetMapping("/professionals")
+    public  ResponseEntity<List<UserResponse>> getProfessionals()
+            throws FatumUserException {
+        return ResponseEntity.status(HttpStatus.OK)
+                .body(toResponseList(userService.getProfessionals()));
     }
 
     @PutMapping("/update")
@@ -66,23 +103,10 @@ public class UserController {
         String awsId = jwt.getSubject();
         User user = userService.updateUser(awsId, request);
 
-        return ResponseEntity.status(HttpStatus.OK).body(toResponse(user));
-    }
-
-    @GetMapping("/me/authenticated")
-    public ResponseEntity<UserStatusResponse> isCurrentUserAuthenticated(
-            @AuthenticationPrincipal Jwt jwt) throws FatumUserException {
-        VerificationStatus status = userService.getVerificationStatus(jwt.getSubject());
         return ResponseEntity.status(HttpStatus.OK)
-                .body(new UserStatusResponse(status, status == VerificationStatus.VERIFIED));
+                .body(toResponse(userService.updateUser(awsId, request)));
     }
 
-    @PutMapping("/deactivate")
-    public ResponseEntity<Void> deactivateCurrentUser(@RequestParam String email)
-            throws FatumUserException {
-        userService.deactivateUser(email);
-        return ResponseEntity.noContent().build();
-    }
 
 
 }
