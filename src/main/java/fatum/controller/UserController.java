@@ -47,9 +47,8 @@ public class UserController {
             @RequestHeader("Lambda-Secret") String receivedSecret
             ) throws FatumUserException {
         if (!lambdaSecret.equals(receivedSecret)) throw new FatumUserException(FatumUserException.FORBIDDEN);
-        User newUser = UserMapper.toEntity(request);
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(toResponse(userService.createUser(newUser)));
+                .body(toResponse(userService.createUser(request)));
     }
 
     @GetMapping("/me")

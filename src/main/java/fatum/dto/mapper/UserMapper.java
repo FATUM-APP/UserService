@@ -17,7 +17,7 @@ public class UserMapper {
     private UserMapper() {}
 
     public static User toEntity(CreateUserRequest request) throws FatumUserException {
-        if (request == null) throw new FatumUserException(FatumUserException.NULL_VALUE);
+        if (request == null) return null;
         return new User.Builder()
                 .awsId(request.awsId())
                 .email(request.email())
@@ -31,10 +31,8 @@ public class UserMapper {
                 .build();
     }
 
-    public static UserResponse toResponse(User user) throws FatumUserException {
-        if (user == null) {
-            throw new FatumUserException(FatumUserException.NULL_VALUE);
-        }
+    public static UserResponse toResponse(User user)  {
+        if (user == null) return null;
 
         AddressDTO[] addresses = user.getAddressList().stream()
                 .map(address -> AddressMapper.toDTO(address, user.getName()))
