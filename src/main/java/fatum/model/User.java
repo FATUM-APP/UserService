@@ -13,10 +13,9 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
-import java.util.ArrayDeque;
-import java.util.LinkedHashSet;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
-import java.util.SequencedSet;
 
 @Entity
 @Table(name = "USERS")
@@ -53,7 +52,18 @@ public class User {
     private UserRole role = UserRole.CLIENT;
 
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
-    private SequencedSet<Address> addressList;
+    /**
+     * Addresses of the account, the first one being the principal one.
+     *
+     * <p>It is a {@code List} and not a {@code SequencedSet} for two reasons. Hibernate builds the
+     * concrete collection itself and has no implementation of {@code SequencedSet} to build, so with
+     * the interface the mapping fails as soon as the collection is loaded ("cannot set
+     * java.util.HashSet"). And the order has to survive the JVM: {@code @OrderColumn} stores the
+     * position of each address in the table, so "the principal one is the first" becomes a fact of
+     * the database and not of the session.</p>
+     */
+    @OrderColumn(name = "POSITION")
+    private List<Address> addressList;
 
     /**
      * Identity verification state. It replaces the former {@code isAuthenticated} boolean, which
@@ -93,7 +103,7 @@ public class User {
         this.verificationStatus = VerificationStatus.VERIFIED;
         this.isActive = true;
         this.gender = (Gender) validateNonNullObject(builder.gender);
-        this.addressList = new LinkedHashSet<>();
+        this.addressList = new ArrayList<>();
     }
 
     public void setUsername(String newUsername) throws FatumUserException {
@@ -197,7 +207,6 @@ public class User {
         }
     }
 }
-
 
 
 
