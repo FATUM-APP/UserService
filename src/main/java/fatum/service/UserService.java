@@ -177,7 +177,7 @@ public class UserService {
      * @return user or null
      * @throws FatumUserException if user is not found
      */
-    public User getUserByPhoneNumber(String phoneNumber) throws FatumUserException {
+    private User getUserByPhoneNumber(String phoneNumber) throws FatumUserException {
         User user = userRepository.findByPhoneNumber(TextNormalizer.trimOrNull(phoneNumber));
         if (user == null) {
             throw new FatumUserException(FatumUserException.USER_NOT_FOUND);
@@ -200,11 +200,18 @@ public class UserService {
      * @return list of users
      */
     public List<User> getUsersByName(String name) {
-        return userRepository.findByNameIgnoreCase(TextNormalizer.trimOrNull(name));
+        return userRepository.findByNameIgnoreCaseAndIsActive(TextNormalizer.trimOrNull(name), true);
     }
 
-    public VerificationStatus getVerificationStatus(String awsId) throws FatumUserException {
-        return getUserById(awsId).getVerificationStatus();
+    public VerificationStatus getVerificationStatus(String email) throws FatumUserException {
+        return getUserByEmail(email).getVerificationStatus();
+    }
+
+    public List<User> getProfessionals() {
+        return getUsersByRole(UserRole.PROFESSIONAL);
+    }
+    private List<User> getUsersByRole(UserRole role) {
+        return userRepository.findByRoleAndIsActive(role, true);
     }
 
     public boolean isUserActiveByEmail(String email) throws FatumUserException {

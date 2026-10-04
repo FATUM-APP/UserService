@@ -53,4 +53,8 @@ public class UserMapper {
                 addresses
         );
     }
+
+    public static List<UserResponse> toResponseList(List<User> users) {
+        return users.stream().map(UserMapper::toResponse).toList();
+    }
 }
