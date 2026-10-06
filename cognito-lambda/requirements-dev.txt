@@ -1,0 +1,4 @@
+-r requirements.txt
+
+# The tests use unittest from the standard library; coverage is the only extra.
+coverage>=7.6

@@ -1,211 +1,57 @@
-# Fatum UserService — Java 25, Spring Boot y almacenamiento compartido
+# Fatum — cuentas y grupo de usuarios
 
-Microservicio de usuarios de Fatum. Implementado con **Java 25**, **Spring Boot 3.5.3**,
-**PostgreSQL**, **Amazon Cognito** (JWT y grupos) y un **servicio de archivos compartido** en lugar de
-S3 directo.
+Aquí viven dos proyectos. Se despliegan por separado y los une un solo contrato: los eventos que
+publica el servicio y que consume la función.
 
-> Las entidades representan el estado persistente y las invariantes del dominio. Los DTOs definen el
-> contrato JSON y concentran la validación de las peticiones.
-
-## Alcance actual
-
-| Aspecto | Estado |
-| --- | --- |
-| Registro y perfil | Activo. El usuario envía sus datos y su foto de perfil |
-| Verificación de identidad | **No activa.** No hay Textract, Rekognition ni prueba de vida |
-| Estados de verificación | El enum completo se conserva, pero **toda cuenta nace `VERIFIED`** |
-| Documentos de identidad | Endpoints y tabla se conservan, apuntando al servicio de archivos. La tabla queda vacía porque la app no los llama |
-| Foto de perfil | Se reemplaza: se sube la nueva y se elimina la anterior |
-
-## Arquitectura
-
-| Capa | Responsabilidad |
-| --- | --- |
-| `fatum.controller` | Recibe peticiones validadas y devuelve DTOs. No expone entidades JPA. Traduce los errores a HTTP en `GlobalExceptionHandler`. |
-| `fatum.dto` | Contratos de entrada/salida y `UserMapper`. |
-| `fatum.service` | Reglas de negocio, unicidad, transacciones y sincronización de grupos de Cognito. |
-| `fatum.model` | Entidades JPA y sus transiciones de estado. |
-| `fatum.repository` | Consultas mediante Spring Data JPA. |
-| `fatum.storage` | Cliente del servicio de archivos compartido (`FileStorageClient`) y unión de PDFs. |
-| `fatum.configuration` | Propiedades tipadas, CORS, seguridad y clientes de AWS. |
-| `db/migration` | Versiona el esquema con Flyway. |
-
-## Verificación
-
-`VerificationStatus` describe el estado de identidad de la cuenta:
-
-| Estado | Significado |
-| --- | --- |
-| `UNVERIFIED` | Nunca verificada, o el último intento quedó sin conclusión |
-| `VERIFIED` | El sistema o un administrador confirmó la identidad |
-| `REJECTED` | La evidencia contradice la identidad y no hay reintento |
-| `MANUAL_REVIEW` | Hace falta que un administrador decida |
-
-Hoy **no hay pipeline de verificación**, así que toda cuenta se crea en `VERIFIED` y el estado sólo se
-lee a través de `GET /users/me/authenticated`. El enum y la columna se mantienen para poder reactivar
-la funcionalidad sin otra migración.
-
-## Contrato de usuario
-
-El alta requiere email, nombre completo, teléfono, fecha de nacimiento, username, documento, tipo de
-documento y género. `document` y `documentType` son obligatorios desde la creación y no forman parte
-del DTO de actualización; quedan inmutables en este servicio.
-
-### Creación
-
-```json
-{
-  "awsId": "us-east-1:0a1b2c3d",
-  "email": "user@example.com",
-  "name": "Camilo Castaño",
-  "phoneNumber": "+573001112233",
-  "birthDate": "1998-05-10",
-  "username": "ccastano46",
-  "document": "1000271422",
-  "documentType": "ID",
-  "gender": "MALE"
-}
+```
+userservice/      las cuentas: registro, perfil, direcciones y los archivos que les pertenecen
+cognito-lambda/   el consumidor de los eventos: es el dueño del grupo de usuarios
 ```
 
-### Actualización
+## userservice
 
-```json
-{
-  "username": "nuevoUsername",
-  "phoneNumber": "+573009998877",
-  "role": "PROFESSIONAL",
-  "city": "Bogotá"
-}
-```
-
-Los campos omitidos no cambian. Un usuario `PROFESSIONAL` exige ciudad, y el cambio de rol lo añade
-**además** al grupo `PROFESSIONAL` de Cognito.
-
-### Respuesta
-
-```json
-{
-  "email": "user@example.com",
-  "name": "CAMILO CASTAÑO",
-  "birthDate": "1998-05-10",
-  "username": "ccastano46",
-  "phoneNumber": "+573001112233",
-  "role": "CLIENT",
-  "verificationStatus": "VERIFIED",
-  "isActive": true,
-  "document": "1000271422",
-  "gender": "MALE",
-  "documentType": "ID",
-  "city": null,
-  "country": "COLOMBIA"
-}
-```
-
-## Endpoints
-
-| Método | Ruta | Autoridad | Resultado |
-| --- | --- | --- | --- |
-| `POST` | `/users/validate-signup` | Pública | Valida el alta sin persistirla |
-| `POST` | `/users/register` | Cabecera `Lambda-Secret` | Crea la cuenta y la une al grupo `VERIFIED` |
-| `GET` | `/users/me` | JWT válido | Devuelve la cuenta actual |
-| `PUT` | `/users/update` | JWT válido | Actualiza los campos mutables |
-| `GET` | `/users/me/authenticated` | JWT válido | Devuelve `verificationStatus` y `isVerified` |
-| `PUT` | `/users/deactivate` | JWT válido | Desactiva lógicamente la cuenta |
-| `PUT` | `/profile-image/update` | JWT válido | Reemplaza la foto de perfil (`multipart`, campo `image`) |
-| `GET` | `/profile-image` | JWT válido | Devuelve la foto actual con una URL temporal |
-| `POST` | `/documents/upload` | JWT válido | Sube un documento (`multipart`, campos `type`, `front`, `back`) |
-| `POST` | `/documents/upload/single` | JWT válido | Sube un PDF ya escaneado (`multipart`, campo `file`) |
-| `GET` | `/documents` | JWT válido | Devuelve el documento de la cuenta |
-
-Los errores de dominio se traducen a HTTP en `GlobalExceptionHandler`: `404` si la cuenta o el archivo
-no existen, `409` si hay conflicto con un valor único y `403` cuando la acción no está permitida.
-
-## Grupos de Cognito
-
-| Momento | Grupo |
-| --- | --- |
-| Al crear la cuenta | `VERIFIED` |
-| Al pasar a `PROFESSIONAL` | `PROFESSIONAL` (además del anterior) |
-
-Si Cognito falla, el registro **no** se cae: la cuenta ya quedó en la base de datos y el error se
-registra en el log. Con `COGNITO_STRICT=true` la petición sí falla, para entornos donde el grupo es
-parte del contrato.
-
-## Almacenamiento de archivos
-
-Este servicio **no conoce buckets**. Llama al `fatum-file-service` indicando una ruta y ese servicio
-decide el bucket, el prefijo y las validaciones:
-
-| Ruta | Uso |
-| --- | --- |
-| `user-service:profile-image` | Fotos de perfil |
-| `user-service:document` | Documentos de identidad (imagen o PDF) |
-
-El servicio de usuarios guarda la clave del objeto; la URL de descarga se firma en el momento de
-responder. Si el servicio de archivos rechaza la petición el cliente recibe `400`; si no responde,
-`502`.
-
-## Pruebas y cobertura
+Servicio Spring Boot. Guarda las cuentas en su base de datos y **anuncia** cada cambio de estado; ya
+no escribe en el grupo de usuarios de Cognito.
 
 ```bash
-./mvnw test      # ejecuta las pruebas y escribe target/site/jacoco/index.html
-./mvnw verify    # además aplica la regla de cobertura
+cd userservice
+mvn clean verify                 # pruebas y la regla de cobertura del paquete de servicios
+docker build -t fatum-userservice .
 ```
 
-JaCoCo mide **únicamente el paquete `fatum.service`**, que es donde viven las reglas de negocio. DTOs,
-entidades, repositorios, adaptadores, configuración y controladores quedan fuera de la medición. La
-regla de aceptación es:
+La regla de cobertura se aplica solo a `fatum.service` (70 % de líneas, 60 % de ramas) y el reporte
+HTML queda en `target/site/jacoco/index.html`.
 
-| Métrica | Mínimo |
-| --- | --- |
-| Líneas cubiertas | 70 % |
-| Ramas cubiertas | 60 % |
+Su documentación está en [userservice/README.md](userservice/README.md) y la API la publica el
+servicio en `/swagger-ui.html`.
 
-## Persistencia y migraciones
+## cognito-lambda
 
-Flyway administra el esquema y Hibernate usa `ddl-auto=validate` por defecto.
-
-| Versión | Contenido |
-| --- | --- |
-| `V1` | Tabla `users` |
-| `V2` | Tabla `profile_images` |
-| `V3` | Tabla `document_files` |
-| `V4` | Reemplaza `is_authenticated` por `verification_status` y ensancha `gender` a `VARCHAR(6)` |
-| `V5` | Ensancha las claves de almacenamiento a `VARCHAR(512)` |
-
-## Variables de entorno
-
-| Variable | Descripción | Ejemplo |
-| --- | --- | --- |
-| `DB_URL` | URL JDBC de PostgreSQL. | `jdbc:postgresql://localhost:5432/fatum_users` |
-| `DB_USERNAME` | Usuario de PostgreSQL. | `postgres` |
-| `DB_PASSWORD` | Contraseña de PostgreSQL. | `postgres` |
-| `USER_POOL_ID` | Pool de usuarios de Cognito. | `us-east-1_9qUKvpTsS` |
-| `LAMBDA_SECRET` | Secreto que protege `/users/register`. | *(secreto)* |
-| `AWS_REGION` | Región de AWS. | `us-east-1` |
-| `FILE_SERVICE_URL` | URL base del servicio de archivos. | `http://localhost:8081` |
-| `FILE_SERVICE_SECRET` | Secreto compartido (`X-Storage-Key`). | *(vacío en local)* |
-| `COGNITO_GROUPS_ENABLED` | Activa la sincronización de grupos. | `true` |
-| `COGNITO_STRICT` | Falla el registro si Cognito falla. | `false` |
-| `JPA_DDL_AUTO` | Validación de Hibernate. | `validate` |
-| `FLYWAY_ENABLED` | Migraciones al arrancar. | `true` |
-| `CORS_ALLOWED_ORIGINS` | Orígenes permitidos. | `http://localhost:5173` |
-| `PORT` | Puerto HTTP. | `8080` |
-
-## Compilación
+Función de Python en AWS Lambda. Escucha los eventos del servicio y escribe el grupo de usuarios:
+grupos, desactivación y reactivación.
 
 ```bash
-./mvnw clean verify
+cd cognito-lambda
+python3 -m unittest discover -s tests -t .
+sam build && sam deploy --guided --parameter-overrides UserPoolId=<pool> EventBusName=<bus>
 ```
 
-El `Dockerfile` incluido construye la imagen del servicio para Cloud Run o cualquier contenedor.
+Su documentación está en [cognito-lambda/README.md](cognito-lambda/README.md).
 
-## Referencias
+## El contrato entre los dos
 
-[1]: https://jakarta.ee/specifications/bean-validation/3.0/jakarta-bean-validation-spec-3.0.html "Jakarta Bean Validation 3.0"
-[2]: https://jakarta.ee/specifications/persistence/3.1/jakarta-persistence-spec-3.1 "Jakarta Persistence 3.1"
-[3]: https://documentation.red-gate.com/flyway/flyway-concepts/migrations "Flyway migrations"
-[4]: https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-pools-user-groups.html "Cognito user pool groups"
-| `V6` | Tabla `addresses`, con la pareja (usuario, residencia) como clave única |
-| `V7` | Alinea `profile_images` con su entidad: `user_aws_id` pasa a `user_username` |
-| `V8` | Columna `position` en `addresses`: el orden de las direcciones vive en la tabla |
+El servicio publica en EventBridge con el origen `fatum.userservice`. Cada hecho viaja con su propio
+`detail-type` y la función enruta por él:
+
+| `detail-type` | Qué hace en el grupo de usuarios |
+| --- | --- |
+| `USER_VERIFICATION_CHANGED` | concede o retira el grupo de verificado |
+| `USER_BECAME_PROFESSIONAL` | concede el grupo de profesional |
+| `PROFESSIONAL_BECAME_CLIENT` | retira el grupo de profesional |
+| `USER_ACTIVE_STATUS_CHANGED` | desactiva, cierra las sesiones y vacía los grupos, o devuelve el acceso |
+| `PROFESSIONAL_PRINCIPAL_ADDRESS_CHANGED` | nada: no es una pertenencia |
+
+Los nombres son lo único que comparten los dos proyectos, así que están declarados en ambos lados:
+`EventPublisherService` en el servicio y `cognito-lambda/src/events.py` en la función. Cambiar uno
+sin el otro es lo que rompe la integración, y falla de forma ruidosa: la función rechaza un evento
+que no puede leer en lugar de adivinarlo.

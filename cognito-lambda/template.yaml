@@ -1,0 +1,104 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Consumer of the events the user service publishes. It owns the user pool: it grants the groups the
+  platform reads (a verified identity, an account that offers a service), revokes everything when an
+  account is deactivated and puts it back when the access is restored.
+
+Parameters:
+  UserPoolId:
+    Type: String
+    Description: Identifier of the user pool this function writes.
+  EventBusName:
+    Type: String
+    Default: default
+    Description: Bus where the user service publishes.
+  VerifiedGroup:
+    Type: String
+    Default: VERIFIED
+  ProfessionalGroup:
+    Type: String
+    Default: PROFESSIONAL
+  Runtime:
+    Type: String
+    Default: python3.13
+  LogRetentionDays:
+    Type: Number
+    Default: 30
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 256
+    Tracing: Active
+
+Resources:
+
+  CognitoSyncFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: src.handler.lambda_handler
+      Runtime: !Ref Runtime
+      Description: Keeps the user pool in sync with the facts published by the user service.
+      Environment:
+        Variables:
+          USER_POOL_ID: !Ref UserPoolId
+          VERIFIED_GROUP: !Ref VerifiedGroup
+          PROFESSIONAL_GROUP: !Ref ProfessionalGroup
+          COGNITO_SYNC_ENABLED: "true"
+          COGNITO_SYNC_STRICT: "true"
+      # Only what this function needs, on the one pool it writes.
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - cognito-idp:AdminAddUserToGroup
+                - cognito-idp:AdminRemoveUserFromGroup
+                - cognito-idp:AdminListGroupsForUser
+                - cognito-idp:AdminDisableUser
+                - cognito-idp:AdminEnableUser
+                - cognito-idp:AdminUserGlobalSignOut
+              Resource: !Sub "arn:${AWS::Partition}:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/${UserPoolId}"
+      # Where the events end when the retries run out. Without it a fact that could not be applied
+      # disappears after two attempts.
+      DeadLetterQueue:
+        Type: SQS
+        TargetArn: !GetAtt FailedEvents.Arn
+      Events:
+        # The address event is not here on purpose: the pool has nothing to do with which address
+        # represents a professional, so forwarding it would only spend invocations.
+        UserFacts:
+          Type: EventBridgeRule
+          Properties:
+            EventBusName: !Ref EventBusName
+            Pattern:
+              source:
+                - fatum.userservice
+              detail-type:
+                - USER_VERIFICATION_CHANGED
+                - USER_BECAME_PROFESSIONAL
+                - PROFESSIONAL_BECAME_CLIENT
+                - USER_ACTIVE_STATUS_CHANGED
+
+  FailedEvents:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: cognito-sync-failed-events
+      MessageRetentionPeriod: 1209600
+
+  CognitoSyncLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${CognitoSyncFunction}"
+      RetentionInDays: !Ref LogRetentionDays
+
+Outputs:
+  FunctionName:
+    Description: Name of the function, for the deploy and the logs.
+    Value: !Ref CognitoSyncFunction
+  FunctionArn:
+    Value: !GetAtt CognitoSyncFunction.Arn
+  FailedEventsQueueUrl:
+    Description: Where the events that could not be applied end.
+    Value: !Ref FailedEvents
