@@ -56,7 +56,7 @@ public class AddressController {
                                                     @RequestParam("alias") String alias)
             throws FatumUserException {
         return ResponseEntity.status(HttpStatus.OK)
-                .body(toDTO(userService.getPrincipalAddress(jwt.getSubject())));
+                .body(toDTO(userService.selectAddress(jwt.getSubject(), alias)));
     }
 
     /** The address that represents the account. */
@@ -73,21 +73,12 @@ public class AddressController {
                 .body(toDTO(userService.getProfessionalAddress(username)));
     }
 
-    @PostMapping()
+    @PostMapping("/new")
     public ResponseEntity<AddressDTO> addAddress(
             @AuthenticationPrincipal Jwt jwt,
             @Valid @RequestBody NewAddressRequest request) throws FatumUserException {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(toDTO(userService.addAddress(jwt.getSubject(), request)));
-    }
-
-    @PutMapping
-    public ResponseEntity<AddressDTO> updateAddress(
-            @AuthenticationPrincipal Jwt jwt,
-            @RequestParam("alias") String alias,
-            @Valid @RequestBody NewAddressRequest request) throws FatumUserException {
-        return ResponseEntity.status(HttpStatus.OK)
-                .body(toDTO(userService.updateAddress(jwt.getSubject(), alias, request)));
     }
 
     /** Moves one address to the principal place. */
@@ -99,7 +90,7 @@ public class AddressController {
                 .body(toDTO(userService.makePrincipalAddress(jwt.getSubject(), alias)));
     }
 
-    @DeleteMapping
+    @DeleteMapping("/delete")
     public ResponseEntity<Void> removeAddress(
             @AuthenticationPrincipal Jwt jwt,
             @RequestParam("alias") String alias) throws FatumUserException {

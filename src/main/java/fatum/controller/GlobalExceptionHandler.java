@@ -37,7 +37,8 @@ public class GlobalExceptionHandler {
                  FatumUserException.USERNAME_EXISTS,
                  FatumUserException.PHONE_EXISTS,
                  FatumUserException.DOCUMENT_EXISTS,
-                 FatumUserException.ADDRESS_EXISTS -> HttpStatus.CONFLICT;
+                 FatumUserException.ADDRESS_EXISTS,
+                 FatumUserException.NO_PROFESSIONAL -> HttpStatus.CONFLICT;
             default -> HttpStatus.BAD_REQUEST;
         };
         return buildError(status, exception.getMessage(), request.getRequestURI(), Map.of());

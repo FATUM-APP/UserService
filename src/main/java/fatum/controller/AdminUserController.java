@@ -23,9 +23,8 @@ import static fatum.dto.mapper.UserMapper.toResponseList;
  * matchers, this annotation is still the one that decides.</p>
  */
 @RestController
-@RequestMapping("/admin/users")
+@RequestMapping("/admin")
 @Validated
-@PreAuthorize("hasRole('ADMIN')")
 public class AdminUserController {
 
     private final UserService userService;

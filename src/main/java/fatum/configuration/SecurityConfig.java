@@ -33,7 +33,7 @@ public class SecurityConfig {
 
                         // The panel of the platform is behind the administrator group.
                         .requestMatchers("/admin/**").hasRole("ADMIN")
-
+                        .requestMatchers("/users/upgrade/**").hasRole("VERIFIED")
                         .anyRequest().authenticated()
 
                 )

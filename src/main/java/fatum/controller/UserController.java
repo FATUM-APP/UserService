@@ -115,4 +115,33 @@ public class UserController {
                 .body(toResponse(userService.updateUser(awsId, request)));
     }
 
+    @PutMapping("/upgrade/address")
+    public ResponseEntity<UserResponse> becomeProfessionalWithAddress(
+            @AuthenticationPrincipal Jwt jwt,
+            @Valid @RequestBody NewAddressRequest request) throws FatumUserException {
+        String awsId = jwt.getSubject();
+        userService.becomeProfessionalWithAddress(awsId,request);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PutMapping("/upgrade")
+    public ResponseEntity<UserResponse> becomeProfessional(
+            @AuthenticationPrincipal Jwt jwt) throws FatumUserException {
+        String awsId = jwt.getSubject();
+        userService.becomeProfessional(awsId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PutMapping("/downgrade")
+    public ResponseEntity<UserResponse> becomeClient(
+            @AuthenticationPrincipal Jwt jwt) throws FatumUserException {
+        String awsId = jwt.getSubject();
+        userService.becomeClient(awsId);
+        return ResponseEntity.noContent().build();
+    }
+
+
+
+
+
 }

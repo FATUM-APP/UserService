@@ -13,15 +13,13 @@ import fatum.model.constant.UserRole;
 import fatum.model.constant.VerificationStatus;
 import fatum.repository.AddressRepository;
 import fatum.repository.UserRepository;
-import fatum.service.cognito.CognitoGroupService;
-import fatum.service.cognito.CognitoUserService;
+import fatum.service.aws.CognitoGroupService;
+import fatum.service.aws.CognitoUserService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import software.amazon.awssdk.services.cognitoidentityprovider.endpoints.internal.Value;
 
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Optional;
 
 @Service
 public class UserService {
@@ -30,16 +28,19 @@ public class UserService {
     private final CognitoGroupService cognitoGroupService;
     private final CognitoUserService cognitoUserService;
     private final AddressRepository addressRepository;
+    private final EventPublisherService eventPublisherService;
 
     public UserService(UserRepository userRepository,
                        CognitoGroupService cognitoGroupService,
                        CognitoUserService cognitoUserService,
-                       AddressRepository addressRepository
+                       AddressRepository addressRepository,
+                       EventPublisherService eventPublisherService
     ) {
         this.userRepository = userRepository;
         this.cognitoGroupService = cognitoGroupService;
         this.cognitoUserService = cognitoUserService;
         this.addressRepository = addressRepository;
+        this.eventPublisherService = eventPublisherService;
 
     }
 
@@ -58,6 +59,7 @@ public class UserService {
     public User createUser(CreateUserRequest newUserRequest) throws FatumUserException {
         User newUser = UserMapper.toEntity(newUserRequest);
         User saved = userRepository.save(newUser);
+        eventPublisherService.verificationStatusChanged(saved.getAwsId(),saved.getEmail(),saved.getVerificationStatus());
         cognitoGroupService.grantVerified(saved.getAwsId());
         return saved;
     }
@@ -287,11 +289,8 @@ public class UserService {
         User existingUser = getUserById(awsId);
         updateUsername(existingUser, request.username());
         updatePhoneNumber(existingUser, request.phoneNumber());
-        updateRoleAndAddress(existingUser, request.role(), request.newAddress());
+        addAddress(existingUser.getAwsId(), request.newAddress());
         User saved = userRepository.save(existingUser);
-        if (saved.getRole() == UserRole.PROFESSIONAL) {
-            cognitoGroupService.grantProfessional(saved.getAwsId());
-        }
         return saved;
     }
 
@@ -371,17 +370,33 @@ public class UserService {
      * <p>The rule "a professional needs an address" is not repeated here: the entity owns it and
      * rejects the change with {@code PROFESSIONAL_CITY} when the account has none.</p>
      */
-    private void updateRoleAndAddress(User user, UserRole role, NewAddressRequest requestedAddress)
+    public void becomeProfessionalWithAddress(String awsId, NewAddressRequest requestedAddress)
             throws FatumUserException {
-        Address newAddress = AddressMapper.toEntity(requestedAddress, user);
-        if (newAddress != null && !user.addressInList(newAddress)) {
-            user.addAddress(newAddress);
-            addressRepository.save(newAddress);
-        }
-        if (role != null) {
-            user.setRole(role);
-        }
+        addAddress(awsId,requestedAddress);
+        setUserRole(awsId, UserRole.PROFESSIONAL);
+        cognitoGroupService.grantProfessional(awsId);
     }
+
+    public void becomeProfessional(String awsId) throws FatumUserException {
+        setUserRole(awsId, UserRole.PROFESSIONAL);
+        cognitoGroupService.grantProfessional(awsId);
+    }
+
+    public void becomeClient(String awsId) throws FatumUserException {
+        setUserRole(awsId, UserRole.CLIENT);
+    }
+
+    private void setUserRole(String awsId, UserRole role) throws FatumUserException {
+        User user = getUserById(awsId);
+        if(role.equals(UserRole.PROFESSIONAL) && !user.getVerificationStatus().equals(VerificationStatus.VERIFIED))
+            throw new FatumUserException(FatumUserException.FORBIDDEN);
+        if(!user.hasAddress() && role == UserRole.PROFESSIONAL) throw new FatumUserException(FatumUserException.PROFESSIONAL_CITY);
+        user.setRole(role);
+        userRepository.save(user);
+        if(role == UserRole.PROFESSIONAL) eventPublisherService.userBecameProfessional(awsId,user.getEmail());
+    }
+
+
 
      //================================================================================================================
      //                                              ADDRESS
@@ -437,10 +452,13 @@ public class UserService {
     public Address addAddress(String awsId, NewAddressRequest request) throws FatumUserException {
         User user = getUserById(awsId);
         Address address = toNewAddress(request, user);
+        if(address == null) throw new FatumUserException(FatumUserException.NULL_VALUE);
         ensureAliasIsFree(user, address.getAlias());
-        user.addAddress(address);
-        addressRepository.save(address);
-        userRepository.save(user);
+        if(!user.addressInList(address)){
+            user.addAddress(address);
+            addressRepository.save(address);
+            userRepository.save(user);
+        }
         return address;
     }
 
@@ -486,6 +504,11 @@ public class UserService {
             throw new FatumUserException(FatumUserException.NO_PROFESSIONAL);
         }
         return getPrincipalAddress(professional.getAwsId());
+    }
+
+    public Address selectAddress(String awsId, String alias) throws FatumUserException {
+        User user = getUserById(awsId);
+        return findAddress(user, alias);
     }
     /**
      * Replaces one address of the account with another one.
@@ -584,6 +607,7 @@ public class UserService {
         User user = getUserByEmail(email);
         user.deactivate();
         User saved = userRepository.save(user);
+        eventPublisherService.activeStatusChanged(saved.getAwsId(), email,false);
         cognitoUserService.revokeAccess(saved.getAwsId());
     }
 
@@ -605,6 +629,7 @@ public class UserService {
         User saved = userRepository.save(user);
         cognitoUserService.enableUser(saved.getAwsId());
         cognitoGroupService.grantVerified(saved.getAwsId());
+        eventPublisherService.activeStatusChanged(saved.getAwsId(), email,true);
         if (saved.getRole() == UserRole.PROFESSIONAL) {
             cognitoGroupService.grantProfessional(saved.getAwsId());
         }

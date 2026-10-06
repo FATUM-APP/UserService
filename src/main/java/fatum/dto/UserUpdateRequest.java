@@ -14,12 +14,6 @@ public record UserUpdateRequest(
         @Size(max = 20, message = "Phone number must not exceed 20 characters")
         String phoneNumber,
 
-        UserRole role,
-
-        @Pattern(regexp = ".*\\S.*", message = "City must not be blank")
-        @Size(max = 50, message = "City must not exceed 50 characters")
-        String city,
-
         @Valid
         NewAddressRequest newAddress
 ) {
@@ -33,6 +27,5 @@ public record UserUpdateRequest(
     public UserUpdateRequest {
         username = TextNormalizer.lower(username);
         phoneNumber = TextNormalizer.trim(phoneNumber);
-        city = TextNormalizer.lower(city);
     }
 }
