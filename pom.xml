@@ -98,10 +98,6 @@
             Only Cognito is called directly. S3 moved behind the shared storage service, so the S3
             client and its presigner are no longer dependencies of this module.
         -->
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>cognitoidentityprovider</artifactId>
-        </dependency>
 
         <dependency>
             <groupId>org.springframework.boot</groupId>

@@ -55,16 +55,6 @@ fatum:
     profile-image-route: ${FILE_SERVICE_PROFILE_IMAGE_ROUTE:user-service:profile-image}
     document-route: ${FILE_SERVICE_DOCUMENT_ROUTE:user-service:document}
 
-  # Groups are the contract the rest of the platform reads, so their names are configuration.
-  cognito:
-    enabled: ${COGNITO_GROUPS_ENABLED:true}
-    user-pool-id: ${USER_POOL_ID:}
-    verified-group: ${COGNITO_VERIFIED_GROUP:VERIFIED}
-    professional-group: ${COGNITO_PROFESSIONAL_GROUP:PROFESSIONAL}
-    use-subject-as-username: ${COGNITO_USE_SUB_AS_USERNAME:false}
-    # A Cognito outage must not fail a sign-up the database already recorded.
-    strict: ${COGNITO_STRICT:false}
-
 app:
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}

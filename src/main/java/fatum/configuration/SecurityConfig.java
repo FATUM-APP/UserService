@@ -27,6 +27,9 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/swagger-ui.html",
                                 "/swagger-ui/**",
+                                "/swagger-ui/**",
+                                // The path springdoc is configured with in application.yaml.
+                                "/api-docs/**",
                                 "/users/validate-signup",
                                 "/users/register"
                         ).permitAll()
@@ -48,9 +51,9 @@ public class SecurityConfig {
     @Bean
     public JwtAuthenticationConverter jwtAuthenticationConverter() {
         JwtGrantedAuthoritiesConverter grantedAuthoritiesConverter = new JwtGrantedAuthoritiesConverter();
-        // Le decimos a Spring que busque en el atributo cognito:groups
+        // The groups of the pool travel in this claim; Spring reads the authorities from there.
         grantedAuthoritiesConverter.setAuthoritiesClaimName("cognito:groups");
-        // Le añade el prefijo ROLE_ (estándar de Spring) para que funcione con hasRole()
+        // The ROLE_ prefix is what hasRole() expects.
         grantedAuthoritiesConverter.setAuthorityPrefix("ROLE_");
 
         JwtAuthenticationConverter jwtAuthenticationConverter = new JwtAuthenticationConverter();

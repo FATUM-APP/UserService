@@ -5,6 +5,8 @@ import fatum.exception.FatumUserException;
 import fatum.storage.StorageException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -12,6 +14,7 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.io.IOException;
 import java.time.Instant;
@@ -20,6 +23,8 @@ import java.util.Map;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     @ExceptionHandler(FatumUserException.class)
     public ResponseEntity<ApiError> handleFatumUserException(
@@ -31,7 +36,6 @@ public class GlobalExceptionHandler {
                  FatumUserException.ADDRESS_NOT_FOUND -> HttpStatus.NOT_FOUND;
             case FatumUserException.INACTIVE,
                  FatumUserException.FORBIDDEN-> HttpStatus.FORBIDDEN;
-            case FatumUserException.COGNITO_GROUP_FAILURE -> HttpStatus.BAD_GATEWAY;
             case FatumUserException.USER_ALREADY_EXISTS,
                  FatumUserException.EMAIL_EXISTS,
                  FatumUserException.USERNAME_EXISTS,
@@ -129,10 +133,29 @@ public class GlobalExceptionHandler {
                 Map.of());
     }
 
+    /**
+     * A URL that does not exist is a 404, not a server failure.
+     *
+     * <p>Without this branch the generic one below answers 500 for a typo in a path, which hides the
+     * real reason from the caller.</p>
+     */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ApiError> handleNoResourceFound(
+            NoResourceFoundException exception,
+            HttpServletRequest request) {
+        return buildError(
+                HttpStatus.NOT_FOUND,
+                "The requested resource does not exist",
+                request.getRequestURI(),
+                Map.of());
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiError> handleUnexpectedError(
             Exception exception,
             HttpServletRequest request) {
+        // The caller gets a generic body, so the failure is written here or it is lost.
+        log.error("Unhandled failure on {} {}", request.getMethod(), request.getRequestURI(), exception);
         return buildError(
                 HttpStatus.INTERNAL_SERVER_ERROR,
                 "Unexpected server error",
