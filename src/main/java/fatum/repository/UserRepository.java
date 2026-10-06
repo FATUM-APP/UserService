@@ -1,6 +1,7 @@
 package fatum.repository;
 
 import fatum.model.User;
+import fatum.model.constant.UserRole;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -19,5 +20,10 @@ public interface UserRepository extends JpaRepository<User, String> {
 
     User findByDocumentIgnoreCase(String document);
 
+    List<User> findByNameIgnoreCaseAndIsActive(String name, boolean isActive);
+
     List<User> findByNameIgnoreCase(String name);
+
+    List<User> findByRoleAndIsActive(UserRole role, boolean isActive);
+
 }

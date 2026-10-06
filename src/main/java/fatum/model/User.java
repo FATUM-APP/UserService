@@ -6,18 +6,15 @@ import fatum.model.constant.DocumentType;
 import fatum.model.constant.Gender;
 import fatum.model.constant.UserRole;
 import fatum.model.constant.VerificationStatus;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 
 @Entity
@@ -54,6 +51,20 @@ public class User {
     @Column(name = "ROLE", nullable = false, length = 20)
     private UserRole role = UserRole.CLIENT;
 
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
+    /**
+     * Addresses of the account, the first one being the principal one.
+     *
+     * <p>It is a {@code List} and not a {@code SequencedSet} for two reasons. Hibernate builds the
+     * concrete collection itself and has no implementation of {@code SequencedSet} to build, so with
+     * the interface the mapping fails as soon as the collection is loaded ("cannot set
+     * java.util.HashSet"). And the order has to survive the JVM: {@code @OrderColumn} stores the
+     * position of each address in the table, so "the principal one is the first" becomes a fact of
+     * the database and not of the session.</p>
+     */
+    @OrderColumn(name = "POSITION")
+    private List<Address> addressList;
+
     /**
      * Identity verification state. It replaces the former {@code isAuthenticated} boolean, which
      * could not express "the system could not decide, a human has to look at it".
@@ -79,36 +90,20 @@ public class User {
     @Column(name = "DOCUMENT_TYPE", nullable = false, length = 20)
     private DocumentType documentType;
 
-    @Column(name = "CITY", length = 50)
-    private String city;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "COUNTRY", nullable = false, length = 50)
-    private Country country = Country.COLOMBIA;
-
-    public User(
-            String awsId,
-            String email,
-            String name,
-            String phoneNumber,
-            LocalDate birthDate,
-            String username,
-            String document,
-            DocumentType documentType,
-            Gender gender
-            ) throws FatumUserException {
-        this.awsId = requireText(awsId);
-        this.email = requireText(email).toLowerCase(Locale.ROOT);
-        this.name = requireText(name).toUpperCase(Locale.ROOT);
-        setPhoneNumber(phoneNumber);
-        this.birthDate = (LocalDate) validateNonNullObject(birthDate);
-        setUsername(username);
-        this.document = requireText(document);
-        this.documentType = (DocumentType) validateNonNullObject(documentType);
+    private User(Builder builder) throws FatumUserException {
+        this.awsId = requireText(builder.awsId);
+        this.email = requireText(builder.email).toLowerCase(Locale.ROOT);
+        this.name = requireText(builder.name).toUpperCase(Locale.ROOT);
+        setPhoneNumber(builder.phoneNumber);
+        this.birthDate = (LocalDate) validateNonNullObject(builder.birthDate);
+        setUsername(builder.username);
+        this.document = requireText(builder.document).toUpperCase(Locale.ROOT);
+        this.documentType = (DocumentType) validateNonNullObject(builder.documentType);
         this.verificationStatus = VerificationStatus.VERIFIED;
         this.isActive = true;
-        this.country = Country.COLOMBIA;
-        this.gender = (Gender) validateNonNullObject(gender);
+        this.gender = (Gender) validateNonNullObject(builder.gender);
+        this.addressList = new ArrayList<>();
     }
 
     public void setUsername(String newUsername) throws FatumUserException {
@@ -119,21 +114,49 @@ public class User {
         this.phoneNumber = requireText(newPhoneNumber);
     }
 
+    public void addAddress(Address address) {
+        addressList.add(address);
+    }
+
+    public void removeAddress(Address address) throws FatumUserException {
+        if (role == UserRole.PROFESSIONAL && addressList.size() == 1)
+            throw new FatumUserException(FatumUserException.PROFESSIONAL_CITY);
+        addressList.remove(address);
+    }
+
+    /**
+     * Moves an address to the head of the list, which is what makes it the principal one.
+     *
+     * <p>Removing it first is not decorative: {@code List.addFirst} inserts, so passing an address
+     * that is already in the list would add a second copy of it instead of moving it. A set could
+     * not hold the duplicate and the move was implicit; the collection is a list now, so the move
+     * is written step by step.</p>
+     */
+    public void makePrincipalAddress(Address address) {
+        addressList.remove(address);
+        addressList.addFirst(address);
+    }
+
+    public Address getPrincipalAddress() {
+        return addressList.getFirst();
+    }
+
+    public boolean hasAddress() {
+        return !addressList.isEmpty();
+    }
+
+    public boolean addressInList(Address address) {
+        return addressList.contains(address);
+    }
+
     public void setRole(UserRole newRole) throws FatumUserException {
         if (newRole == null) {
             throw new FatumUserException(FatumUserException.NULL_VALUE);
         }
-        if (newRole == UserRole.PROFESSIONAL && (city == null || city.isBlank())) {
+        if (newRole == UserRole.PROFESSIONAL && addressList.isEmpty()) {
             throw new FatumUserException(FatumUserException.PROFESSIONAL_CITY);
         }
         this.role = newRole;
-    }
-
-    public void setCity(String newCity) throws FatumUserException {
-        if (role == UserRole.PROFESSIONAL && (newCity == null || newCity.isBlank())) {
-            throw new FatumUserException(FatumUserException.PROFESSIONAL_CITY);
-        }
-        this.city = newCity == null || newCity.isBlank() ? null : newCity.trim();
     }
 
     /**
@@ -157,6 +180,17 @@ public class User {
         this.isActive = false;
     }
 
+    /**
+     * Gives the account its access back.
+     *
+     * <p>It only flips the local flag: restoring the access in the user pool belongs to whoever
+     * reactivates, and the service does it right after saving, the same way it revokes it when the
+     * account is deactivated.</p>
+     */
+    public void activate() {
+        this.isActive = true;
+    }
+
     private Object validateNonNullObject(Object value) throws FatumUserException {
         if (value == null) throw new FatumUserException(FatumUserException.NULL_VALUE);
         return value;
@@ -166,4 +200,33 @@ public class User {
         if (value == null || value.isBlank()) throw new FatumUserException(FatumUserException.NULL_VALUE);
         return value.trim();
     }
+
+    public static class Builder {
+        private String awsId;
+        private String email;
+        private String name;
+        private String phoneNumber;
+        private LocalDate birthDate;
+        private String username;
+        private String document;
+        private DocumentType documentType;
+        private Gender gender;
+
+        public Builder awsId(String awsId) { this.awsId = awsId; return this; }
+        public Builder email(String email) { this.email = email; return this; }
+        public Builder name(String name) { this.name = name; return this; }
+        public Builder phoneNumber(String phoneNumber) { this.phoneNumber = phoneNumber; return this; }
+        public Builder birthDate(LocalDate birthDate) { this.birthDate = birthDate; return this; }
+        public Builder username(String username) { this.username = username; return this; }
+        public Builder document(String document) { this.document = document; return this; }
+        public Builder documentType(DocumentType documentType) { this.documentType = documentType; return this; }
+        public Builder gender(Gender gender) { this.gender = gender; return this; }
+
+        public User build() throws FatumUserException {
+            return new User(this);
+        }
+    }
 }
+
+
+

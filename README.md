@@ -206,3 +206,6 @@ El `Dockerfile` incluido construye la imagen del servicio para Cloud Run o cualq
 [2]: https://jakarta.ee/specifications/persistence/3.1/jakarta-persistence-spec-3.1 "Jakarta Persistence 3.1"
 [3]: https://documentation.red-gate.com/flyway/flyway-concepts/migrations "Flyway migrations"
 [4]: https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-pools-user-groups.html "Cognito user pool groups"
+| `V6` | Tabla `addresses`, con la pareja (usuario, residencia) como clave única |
+| `V7` | Alinea `profile_images` con su entidad: `user_aws_id` pasa a `user_username` |
+| `V8` | Columna `position` en `addresses`: el orden de las direcciones vive en la tabla |

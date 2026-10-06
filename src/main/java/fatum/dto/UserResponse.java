@@ -20,7 +20,6 @@ public record UserResponse(
         String document,
         Gender gender,
         DocumentType documentType,
-        String city,
-        Country country
+        AddressDTO[] addresses
 ) {
 }

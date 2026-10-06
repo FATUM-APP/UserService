@@ -35,6 +35,12 @@ aws:
   region: ${AWS_REGION:us-east-1}
   cognito:
     user-pool-id: ${USER_POOL_ID}
+  event-bridge:
+    bus-name: ${BUS_NAME}
+    endpoint: ${EVENT_ENDPOINT}
+  sqs:
+    queue-url: ${QUEUE_URL}
+    endpoint: ${EVENT_ENDPOINT}
 
 # ------------------------------------------------------------------------------------------------
 # Shared storage microservice. This service no longer talks to S3: it names a route and the storage
@@ -64,6 +70,15 @@ app:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
   lambda:
     secret: ${LAMBDA_SECRET}
+  operation:
+    allowed-locations:
+      colombia:
+        - bogota
+        - medellin
+        - cali
+      mexico:
+        - cdmx
+        - monterrey
 
 springdoc:
   api-docs:

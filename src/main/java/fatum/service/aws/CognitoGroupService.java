@@ -1,4 +1,4 @@
-package fatum.service;
+package fatum.service.aws;
 
 import fatum.configuration.CognitoProperties;
 import fatum.exception.FatumUserException;

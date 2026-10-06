@@ -1,14 +1,12 @@
 package fatum.controller;
 
-import fatum.dto.CreateUserRequest;
-import fatum.dto.UserMapper;
-import fatum.dto.UserResponse;
-import fatum.dto.UserStatusResponse;
-import fatum.dto.UserUpdateRequest;
+import fatum.dto.*;
+import fatum.dto.mapper.UserMapper;
 import fatum.exception.FatumUserException;
 import fatum.model.User;
 import fatum.model.constant.VerificationStatus;
 import fatum.service.UserService;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -18,7 +16,10 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 
-import static fatum.dto.UserMapper.toResponse;
+import java.util.List;
+
+import static fatum.dto.mapper.UserMapper.toResponse;
+import static fatum.dto.mapper.UserMapper.toResponseList;
 
 @RestController
 @RequestMapping("/users")
@@ -36,7 +37,7 @@ public class UserController {
     }
 
     @PostMapping("/validate-signup")
-    public ResponseEntity<Void> validateSignup(@RequestBody CreateUserRequest dto) throws FatumUserException {
+    public ResponseEntity<Void> validateSignup(@Valid @RequestBody CreateUserRequest dto) throws FatumUserException {
 
         User tempUser = UserMapper.toEntity(dto);
         userService.validateUser(tempUser);
@@ -45,52 +46,102 @@ public class UserController {
 
     @PostMapping("/register")
     public ResponseEntity<UserResponse> registerUser(
-            @RequestBody CreateUserRequest request,
+            @Valid @RequestBody CreateUserRequest request,
             @RequestHeader("Lambda-Secret") String receivedSecret
             ) throws FatumUserException {
         if (!lambdaSecret.equals(receivedSecret)) throw new FatumUserException(FatumUserException.FORBIDDEN);
-        User newUser = UserMapper.toEntity(request);
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(toResponse(userService.createUser(newUser)));
+                .body(toResponse(userService.createUser(request)));
     }
 
+    /**
+     * The account of the token, whether it is active or not: the caller is already authenticated and
+     * hiding somebody from themselves protects nothing.
+     */
     @GetMapping("/me")
     public ResponseEntity<UserResponse> getCurrentUser(@AuthenticationPrincipal Jwt jwt)
             throws FatumUserException {
         String awsId = jwt.getSubject();
-        return ResponseEntity.ok(toResponse(userService.getUserById(awsId)));
+        return ResponseEntity.status(HttpStatus.OK)
+                .body(toResponse(userService.getUserById(awsId)));
+    }
+
+    /**
+     * The three lookups below answer about other accounts, so they only hand out the ones that are
+     * active: a deactivated account is refused with {@code INACTIVE} instead of shown. The
+     * administrative view of the same lookups lives in {@code AdminUserController}.
+     */
+    @GetMapping("/by-username")
+    public ResponseEntity<UserResponse> getUserByUsername(@RequestParam("username") String username)
+            throws FatumUserException {
+        return ResponseEntity.status(HttpStatus.OK)
+                .body(toResponse(userService.getActiveUserByUsername(username)));
+    }
+
+    @GetMapping("/by-email")
+    public ResponseEntity<UserResponse> getUserByEmail(@RequestParam("email") String email)
+            throws FatumUserException {
+        return ResponseEntity.status(HttpStatus.OK)
+                .body(toResponse(userService.getActiveUserByEmail(email)));
+    }
+
+    @GetMapping("/search")
+    public ResponseEntity<List<UserResponse>> getUsersByName(@RequestParam("name") String name)
+            throws FatumUserException {
+        return ResponseEntity.status(HttpStatus.OK)
+                .body(toResponseList(userService.getActiveUsersByName(name)));
+    }
+
+    @GetMapping("/verification-status")
+    public ResponseEntity<VerificationStatus> getVerificationStatus(@RequestParam("email") String email)
+            throws FatumUserException {
+        return ResponseEntity.status(HttpStatus.OK)
+                .body(userService.getVerificationStatus(email));
+    }
+
+    @GetMapping("/professionals")
+    public  ResponseEntity<List<UserResponse>> getProfessionals()
+            throws FatumUserException {
+        return ResponseEntity.status(HttpStatus.OK)
+                .body(toResponseList(userService.getProfessionals()));
     }
 
     @PutMapping("/update")
     public ResponseEntity<UserResponse> updateCurrentUser(
             @AuthenticationPrincipal Jwt jwt,
-            @RequestBody UserUpdateRequest request) throws FatumUserException {
+            @Valid @RequestBody UserUpdateRequest request) throws FatumUserException {
         String awsId = jwt.getSubject();
-        User user = userService.updateUser(
-                awsId,
-                request.username(),
-                request.phoneNumber(),
-                request.role(),
-                request.city()
-        );
-
-        return ResponseEntity.status(HttpStatus.OK).body(toResponse(user));
-    }
-
-    @GetMapping("/me/authenticated")
-    public ResponseEntity<UserStatusResponse> isCurrentUserAuthenticated(
-            @AuthenticationPrincipal Jwt jwt) throws FatumUserException {
-        VerificationStatus status = userService.getVerificationStatus(jwt.getSubject());
         return ResponseEntity.status(HttpStatus.OK)
-                .body(new UserStatusResponse(status, status == VerificationStatus.VERIFIED));
+                .body(toResponse(userService.updateUser(awsId, request)));
     }
 
-    @PutMapping("/deactivate")
-    public ResponseEntity<Void> deactivateCurrentUser(@RequestParam String email)
-            throws FatumUserException {
-        userService.deactivateUser(email);
+    @PutMapping("/upgrade/address")
+    public ResponseEntity<UserResponse> becomeProfessionalWithAddress(
+            @AuthenticationPrincipal Jwt jwt,
+            @Valid @RequestBody NewAddressRequest request) throws FatumUserException {
+        String awsId = jwt.getSubject();
+        userService.becomeProfessionalWithAddress(awsId,request);
         return ResponseEntity.noContent().build();
     }
+
+    @PutMapping("/upgrade")
+    public ResponseEntity<UserResponse> becomeProfessional(
+            @AuthenticationPrincipal Jwt jwt) throws FatumUserException {
+        String awsId = jwt.getSubject();
+        userService.becomeProfessional(awsId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PutMapping("/downgrade")
+    public ResponseEntity<UserResponse> becomeClient(
+            @AuthenticationPrincipal Jwt jwt) throws FatumUserException {
+        String awsId = jwt.getSubject();
+        userService.becomeClient(awsId);
+        return ResponseEntity.noContent().build();
+    }
+
+
+
 
 
 }

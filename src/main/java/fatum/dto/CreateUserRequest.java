@@ -43,7 +43,23 @@ public record CreateUserRequest(
         @NotNull(message = "Document type is required")
         DocumentType documentType,
 
-        @NotNull(message ="Gender is required")
+        @NotNull(message = "Gender is required")
         Gender gender
 ) {
+
+    /**
+     * Cleans the text before anything else sees it.
+     *
+     * <p>Jackson builds the record and this constructor runs before Bean Validation, so the
+     * annotations above judge the value the application will actually store: a field made of spaces
+     * becomes empty and {@code @NotBlank} rejects it.</p>
+     */
+    public CreateUserRequest {
+        awsId = TextNormalizer.trim(awsId);
+        email = TextNormalizer.lower(email);
+        name = TextNormalizer.upper(name);
+        phoneNumber = TextNormalizer.trim(phoneNumber);
+        username = TextNormalizer.lower(username);
+        document = TextNormalizer.upper(document);
+    }
 }

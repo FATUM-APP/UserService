@@ -141,6 +141,16 @@
         </dependency>
 
         <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>eventbridge</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>sqs</artifactId>
+        </dependency>
+
+        <dependency>
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
             <scope>test</scope>
@@ -183,8 +193,10 @@
                 <version>${jacoco.version}</version>
                 <configuration>
                     <excludes>
+                        <!-- Only fatum.service is measured: the gate is about the business rules. -->
                         <exclude>**/dto/**</exclude>
                         <exclude>**/model/**</exclude>
+                        <exclude>**/mapper/**</exclude>
                         <exclude>**/configuration/**</exclude>
                         <exclude>**/exception/**</exclude>
                         <exclude>**/controller/**</exclude>

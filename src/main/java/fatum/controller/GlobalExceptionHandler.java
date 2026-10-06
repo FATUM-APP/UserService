@@ -8,6 +8,7 @@ import jakarta.validation.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -26,7 +27,8 @@ public class GlobalExceptionHandler {
             HttpServletRequest request) {
         HttpStatus status = switch (exception.getMessage()) {
             case FatumUserException.USER_NOT_FOUND,
-                 FatumUserException.FILE_NOT_FOUND -> HttpStatus.NOT_FOUND;
+                 FatumUserException.FILE_NOT_FOUND,
+                 FatumUserException.ADDRESS_NOT_FOUND -> HttpStatus.NOT_FOUND;
             case FatumUserException.INACTIVE,
                  FatumUserException.FORBIDDEN-> HttpStatus.FORBIDDEN;
             case FatumUserException.COGNITO_GROUP_FAILURE -> HttpStatus.BAD_GATEWAY;
@@ -34,7 +36,9 @@ public class GlobalExceptionHandler {
                  FatumUserException.EMAIL_EXISTS,
                  FatumUserException.USERNAME_EXISTS,
                  FatumUserException.PHONE_EXISTS,
-                 FatumUserException.DOCUMENT_EXISTS -> HttpStatus.CONFLICT;
+                 FatumUserException.DOCUMENT_EXISTS,
+                 FatumUserException.ADDRESS_EXISTS,
+                 FatumUserException.NO_PROFESSIONAL -> HttpStatus.CONFLICT;
             default -> HttpStatus.BAD_REQUEST;
         };
         return buildError(status, exception.getMessage(), request.getRequestURI(), Map.of());
@@ -103,6 +107,24 @@ public class GlobalExceptionHandler {
         return buildError(
                 HttpStatus.INTERNAL_SERVER_ERROR,
                 "Error processing the stored file",
+                request.getRequestURI(),
+                Map.of());
+    }
+
+    /**
+     * A refusal of the method security is a permission problem, not a server failure.
+     *
+     * <p>Without this handler the generic branch below would answer 500, which hides the real reason
+     * from the caller and from the logs. It also covers the refusal the filter chain raises on the
+     * routes only an administrator may reach.</p>
+     */
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ApiError> handleAccessDenied(
+            AccessDeniedException exception,
+            HttpServletRequest request) {
+        return buildError(
+                HttpStatus.FORBIDDEN,
+                FatumUserException.FORBIDDEN,
                 request.getRequestURI(),
                 Map.of());
     }
