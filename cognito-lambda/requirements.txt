@@ -1,3 +1,0 @@
-# The Python runtime of Lambda already ships boto3, so this file is not part of the deployment
-# package: it is here so the project can be run and tested on a machine that has none.
-boto3>=1.35
