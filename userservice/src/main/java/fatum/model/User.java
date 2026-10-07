@@ -162,6 +162,15 @@ public class User {
     /**
      * Records the identity verification state of the account.
      *
+     * <p>An account that is not verified cannot be a professional, so losing the state takes that
+     * condition with it and the account goes back to being a client. The rule lives in the only door
+     * that writes the state, the same reason the promotion is guarded on the other side; the two
+     * halves of one rule in two places is how they end up telling different stories.</p>
+     *
+     * <p>The reverse is not true: becoming verified again does not make anybody a professional,
+     * because offering a service is a decision of the account and not a consequence of the
+     * document. That is a promotion, and it goes through {@code setRole}.</p>
+     *
      * @param newStatus state to store; never null
      * @throws FatumUserException when the state is missing
      */
@@ -170,6 +179,9 @@ public class User {
             throw new FatumUserException(FatumUserException.NULL_VALUE);
         }
         this.verificationStatus = newStatus;
+        if (newStatus != VerificationStatus.VERIFIED && role == UserRole.PROFESSIONAL) {
+            this.role = UserRole.CLIENT;
+        }
     }
 
     public boolean isVerified() {

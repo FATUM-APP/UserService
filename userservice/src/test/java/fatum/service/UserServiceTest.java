@@ -616,4 +616,70 @@ class UserServiceTest {
         verify(eventPublisherService)
                 .activeStatusChanged(USER_ID, existing.getEmail(), true, UserRole.PROFESSIONAL);
     }
+
+    // ------------------------------------------------------------- verification
+    @Test
+    void losingTheVerificationTakesTheProfessionalConditionAway() throws FatumUserException {
+        User existing = Fixtures.user();
+        existing.addAddress(Fixtures.address(existing));
+        existing.setRole(UserRole.PROFESSIONAL);
+        when(userRepository.findByAwsId(USER_ID)).thenReturn(existing);
+        when(userRepository.save(existing)).thenReturn(existing);
+
+        User updated = service.changeVerificationStatus(USER_ID, VerificationStatus.REJECTED);
+
+        assertThat(updated.getVerificationStatus()).isEqualTo(VerificationStatus.REJECTED);
+        assertThat(updated.getRole()).isEqualTo(UserRole.CLIENT);
+        verify(eventPublisherService)
+                .verificationStatusChanged(USER_ID, existing.getEmail(), VerificationStatus.REJECTED);
+        verify(eventPublisherService).professionalBecameClient(USER_ID, existing.getEmail());
+    }
+
+    @Test
+    void aClientWhoLosesTheVerificationOnlyLeavesTheVerifiedGroup() throws FatumUserException {
+        User existing = Fixtures.user();
+        when(userRepository.findByAwsId(USER_ID)).thenReturn(existing);
+        when(userRepository.save(existing)).thenReturn(existing);
+
+        service.changeVerificationStatus(USER_ID, VerificationStatus.UNVERIFIED);
+
+        assertThat(existing.getRole()).isEqualTo(UserRole.CLIENT);
+        verify(eventPublisherService)
+                .verificationStatusChanged(USER_ID, existing.getEmail(), VerificationStatus.UNVERIFIED);
+        verify(eventPublisherService, never()).professionalBecameClient(anyString(), anyString());
+    }
+
+    @Test
+    void becomingVerifiedAgainDoesNotMakeAnybodyAProfessional() throws FatumUserException {
+        User existing = Fixtures.user();
+        existing.markVerificationStatus(VerificationStatus.REJECTED);
+        when(userRepository.findByAwsId(USER_ID)).thenReturn(existing);
+        when(userRepository.save(existing)).thenReturn(existing);
+
+        User updated = service.changeVerificationStatus(USER_ID, VerificationStatus.VERIFIED);
+
+        assertThat(updated.getRole()).isEqualTo(UserRole.CLIENT);
+        verify(eventPublisherService)
+                .verificationStatusChanged(USER_ID, existing.getEmail(), VerificationStatus.VERIFIED);
+        verify(eventPublisherService, never()).userBecameProfessional(anyString(), anyString());
+    }
+
+    @Test
+    void recordingTheVerificationOfAnUnknownAccountFails() {
+        when(userRepository.findByAwsId(USER_ID)).thenReturn(null);
+
+        assertThatThrownBy(() -> service.changeVerificationStatus(USER_ID, VerificationStatus.REJECTED))
+                .isInstanceOf(FatumUserException.class)
+                .hasMessage(FatumUserException.USER_NOT_FOUND);
+    }
+
+    @Test
+    void theVerificationCannotBeRecordedAsNothing() {
+        User existing = Fixtures.user();
+        when(userRepository.findByAwsId(USER_ID)).thenReturn(existing);
+
+        assertThatThrownBy(() -> service.changeVerificationStatus(USER_ID, null))
+                .isInstanceOf(FatumUserException.class)
+                .hasMessage(FatumUserException.NULL_VALUE);
+    }
 }

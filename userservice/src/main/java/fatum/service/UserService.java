@@ -408,6 +408,35 @@ public class UserService {
         }
     }
 
+    //==============================================================================================================
+    //                                              VERIFICATION
+    //==============================================================================================================
+    /**
+     * Records the verification state of an account and announces it.
+     *
+     * <p>Losing the verification takes the professional condition with it, and for the user pool that
+     * is two facts: the account leaves the verified group and it leaves the professional group. Both
+     * are announced, each one with its own event, so the consumer applies what it is told instead of
+     * deriving one from the other.</p>
+     *
+     * @param awsId identifier of the account
+     * @param status state to record
+     * @return the stored account
+     * @throws FatumUserException if the account does not exist or the state is missing
+     */
+    @Transactional
+    public User changeVerificationStatus(String awsId, VerificationStatus status) throws FatumUserException {
+        User user = getUserById(awsId);
+        UserRole previousRole = user.getRole();
+        user.markVerificationStatus(status);
+        userRepository.save(user);
+        eventPublisherService.verificationStatusChanged(awsId, user.getEmail(), user.getVerificationStatus());
+        if (previousRole == UserRole.PROFESSIONAL && user.getRole() == UserRole.CLIENT) {
+            eventPublisherService.professionalBecameClient(awsId, user.getEmail());
+        }
+        return user;
+    }
+
 
 
      //================================================================================================================

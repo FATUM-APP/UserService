@@ -135,6 +135,13 @@ hecho en EventBridge; quien sí toca el pool es la función `cognito-lambda`.
 Cada hecho viaja con su propio `detail-type` porque es lo que filtra la regla del bus. Si el bus
 rechaza una entrada, queda en el log: EventBridge responde 200 aunque la entrada no se haya aceptado.
 
+Perder la verificación arrastra la condición de profesional: la cuenta vuelve a `CLIENT` y se
+publican los dos hechos, `USER_VERIFICATION_CHANGED` y `PROFESSIONAL_BECAME_CLIENT`, de modo que el
+consumidor retira el grupo verificado y el de profesional. La regla vive en el modelo
+(`User.markVerificationStatus`) y no en quien la invoca, para que valga por cualquier camino que
+escriba el estado. Volver a estar verificado **no** devuelve la condición de profesional: eso es una
+decisión de la cuenta y pasa por `/users/upgrade`.
+
 ## Almacenamiento de archivos
 
 Este servicio **no conoce buckets**. Llama al `fatum-file-service` indicando una ruta y ese servicio

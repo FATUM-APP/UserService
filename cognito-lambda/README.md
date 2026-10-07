@@ -20,6 +20,11 @@ el servicio dejó de saber que Cognito existe.
 
 Todas las llamadas son idempotentes, así que un evento reintentado no hace daño.
 
+El grupo de profesional se retira con `PROFESSIONAL_BECAME_CLIENT` y no con el evento de
+verificación, porque la regla se decide en el servicio: cuando una cuenta pierde la verificación
+también pierde la condición de profesional, y las dos cosas llegan anunciadas. Aquí no se deduce una
+de la otra.
+
 El `awsId` del detalle es el `sub` del token y se usa como `Username` de las llamadas de
 administración. Eso funciona mientras el grupo esté configurado con el `sub` como nombre de usuario,
 que es como está construido este pool; si eso cambia, la función necesita el atributo de nombre de

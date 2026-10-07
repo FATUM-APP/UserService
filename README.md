@@ -51,6 +51,9 @@ El servicio publica en EventBridge con el origen `fatum.userservice`. Cada hecho
 | `USER_ACTIVE_STATUS_CHANGED` | desactiva, cierra las sesiones y vacía los grupos, o devuelve el acceso |
 | `PROFESSIONAL_PRINCIPAL_ADDRESS_CHANGED` | nada: no es una pertenencia |
 
+Como la verificación es condición para ser profesional, perderla devuelve la cuenta a cliente y
+el consumidor recibe los dos hechos: retira el grupo verificado y el de profesional.
+
 Los nombres son lo único que comparten los dos proyectos, así que están declarados en ambos lados:
 `EventPublisherService` en el servicio y `cognito-lambda/src/events.py` en la función. Cambiar uno
 sin el otro es lo que rompe la integración, y falla de forma ruidosa: la función rechaza un evento
