@@ -26,8 +26,6 @@ public class FileStorageProperties {
 
     private String profileImageRoute = "user-service:profile-image";
 
-    private String livenessRoute = "user-service:liveness";
-
     private String documentRoute = "user-service:document";
 
     public String getBaseUrl() {
@@ -68,14 +66,6 @@ public class FileStorageProperties {
 
     public void setProfileImageRoute(String profileImageRoute) {
         this.profileImageRoute = profileImageRoute;
-    }
-
-    public String getLivenessRoute() {
-        return livenessRoute;
-    }
-
-    public void setLivenessRoute(String livenessRoute) {
-        this.livenessRoute = livenessRoute;
     }
 
     public String getDocumentRoute() {

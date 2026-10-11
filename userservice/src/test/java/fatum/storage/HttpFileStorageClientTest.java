@@ -55,7 +55,7 @@ class HttpFileStorageClientTest {
 
     @Test
     void theMultipartBodyCarriesTheFilename() {
-        server.expect(requestTo("http://storage.test:8081/files?route=user-service:liveness"))
+        server.expect(requestTo("http://storage.test:8081/files?route=user-service:document"))
                 .andRespond(request -> {
                     MockClientHttpRequest httpRequest = (MockClientHttpRequest) request;
                     String body = httpRequest.getBodyAsString();
@@ -66,7 +66,7 @@ class HttpFileStorageClientTest {
                             """, MediaType.APPLICATION_JSON).createResponse(request);
                 });
 
-        client.upload(Fixtures.image("file", "frame.png"), "user-service:liveness");
+        client.upload(Fixtures.image("file", "frame.png"), "user-service:document");
 
         server.verify();
     }
@@ -144,7 +144,7 @@ class HttpFileStorageClientTest {
 
     @Test
     void readsThePreSignedUrl() {
-        server.expect(requestTo("http://storage.test:8081/files/url?route=user-service:document&key=documents/front.png"))
+        server.expect(requestTo("http://storage.test:8081/files?route=user-service:document&key=documents/front.png"))
                 .andRespond(withSuccess("{\"url\":\"https://s3/front.png\"}", MediaType.APPLICATION_JSON));
 
         assertThat(client.presignedUrl("user-service:document", "documents/front.png"))
@@ -159,7 +159,7 @@ class HttpFileStorageClientTest {
 
     @Test
     void aFailingPreSignedUrlCallIsReported() {
-        server.expect(requestTo("http://storage.test:8081/files/url?route=user-service:document&key=documents/front.png"))
+        server.expect(requestTo("http://storage.test:8081/files?route=user-service:document&key=documents/front.png"))
                 .andRespond(withStatus(HttpStatus.NOT_FOUND).contentType(MediaType.APPLICATION_JSON)
                         .body("{\"message\":\"Object not found\"}"));
 

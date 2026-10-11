@@ -101,7 +101,7 @@ public class HttpFileStorageClient implements FileStorageClient {
         }
         try {
             Map<?, ?> response = restClient.get()
-                    .uri(builder -> builder.path("/files/url")
+                    .uri(builder -> builder.path("/files")
                             .queryParam("route", route)
                             .queryParam("key", objectKey)
                             .build())
