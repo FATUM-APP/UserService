@@ -21,7 +21,7 @@
     <properties>
         <java.version>25</java.version>
         <lombok.version>1.18.38</lombok.version>
-        <aws.sdk.version>2.25.0</aws.sdk.version>
+        <aws.sdk.version>2.55.12</aws.sdk.version>
         <springdoc.version>2.8.17</springdoc.version>
         <!-- 0.8.15 is the first JaCoCo whose ASM understands class file version 69 (Java 25). -->
         <jacoco.version>0.8.15</jacoco.version>
@@ -138,7 +138,7 @@
 
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
-            <artifactId>eventbridge</artifactId>
+            <artifactId>eventbridgev2</artifactId>
         </dependency>
 
         <dependency>
@@ -196,9 +196,11 @@
                         <exclude>**/configuration/**</exclude>
                         <exclude>**/exception/**</exclude>
                         <exclude>**/controller/**</exclude>
+                        <exclude>**/controller/</exclude>
                         <exclude>**/repository/**</exclude>
                         <exclude>**/storage/**</exclude>
                         <exclude>**/*Application.*</exclude>
+                        <exclude>**/EventPublisherService.*</exclude>
                     </excludes>
                 </configuration>
                 <executions>

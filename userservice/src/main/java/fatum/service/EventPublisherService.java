@@ -8,11 +8,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import software.amazon.awssdk.services.eventbridge.EventBridgeClient;
-import software.amazon.awssdk.services.eventbridge.model.PutEventsRequest;
-import software.amazon.awssdk.services.eventbridge.model.PutEventsRequestEntry;
-import software.amazon.awssdk.services.eventbridge.model.PutEventsResponse;
-import software.amazon.awssdk.services.eventbridge.model.PutEventsResultEntry;
+import software.amazon.awssdk.services.eventbridgev2.EventBridgeV2Client;
+import software.amazon.awssdk.services.eventbridgev2.model.PutEventsRequest;
+import software.amazon.awssdk.services.eventbridgev2.model.PutEventsRequestEntry;
+import software.amazon.awssdk.services.eventbridgev2.model.PutEventsResponse;
+import software.amazon.awssdk.services.eventbridgev2.model.PutEventsResultEntry;
 
 import java.util.Map;
 
@@ -48,16 +48,16 @@ public class EventPublisherService {
     /** A professional moved which address represents it. */
     public static final String PRINCIPAL_ADDRESS_CHANGED = "PROFESSIONAL_PRINCIPAL_ADDRESS_CHANGED";
 
-    private final EventBridgeClient eventBridgeClient;
-    private final String eventBusName;
+    private final EventBridgeV2Client eventBridgeClient;
+    private final String eventBusArn;
     private final ObjectMapper objectMapper;
 
     public EventPublisherService(
-            EventBridgeClient eventBridgeClient,
-            @Value("${aws.eventbridge.bus-name}") String eventBusName,
+            EventBridgeV2Client eventBridgeClient,
+            @Value("${aws.eventbridge.bus-arn}") String eventBusArn,
             ObjectMapper objectMapper) {
         this.eventBridgeClient = eventBridgeClient;
-        this.eventBusName = eventBusName;
+        this.eventBusArn = eventBusArn;
         this.objectMapper = objectMapper;
     }
 
@@ -117,14 +117,16 @@ public class EventPublisherService {
 
     private void publish(String detailType, Map<String, Object> payload) {
         PutEventsRequestEntry entry = PutEventsRequestEntry.builder()
-                .eventBusName(eventBusName)
                 .source(SOURCE)
                 .detailType(detailType)
                 .detail(serialize(payload))
                 .build();
 
         PutEventsResponse response = eventBridgeClient.putEvents(
-                PutEventsRequest.builder().entries(entry).build());
+                PutEventsRequest.builder()
+                        .eventBusArn(eventBusArn)
+                        .entries(entry)
+                        .build());
         reportFailures(detailType, response);
     }
 
