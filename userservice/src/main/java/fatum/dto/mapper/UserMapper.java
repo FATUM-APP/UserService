@@ -59,7 +59,9 @@ public class UserMapper {
     public static M2User toM2Response(User user)  {
         if (user == null) return null;
 
-        AddressDTO address = AddressMapper.toDTO(user.getAddressList().getFirst(), user.getName());
+        AddressDTO address = user.hasAddress()
+                ? AddressMapper.toDTO(user.getPrincipalAddress(), user.getName())
+                : null;
 
         return new M2User(
                 user.getUserId(),

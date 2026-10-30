@@ -8,7 +8,7 @@ import fatum.model.constant.VerificationStatus;
 import java.time.LocalDate;
 
 public record UserResponse(
-        String id,
+        String userId,
         String email,
         String name,
         LocalDate birthDate,
