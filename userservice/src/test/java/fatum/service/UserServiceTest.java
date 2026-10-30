@@ -1,6 +1,7 @@
 package fatum.service;
 
 import fatum.dto.NewAddressRequest;
+import fatum.dto.UserResponse;
 import fatum.dto.UserUpdateRequest;
 import fatum.exception.FatumUserException;
 import fatum.model.Address;
@@ -207,21 +208,23 @@ class UserServiceTest {
         User existing = Fixtures.user();
         when(userRepository.findByAwsId(USER_ID)).thenReturn(existing);
 
-        assertThat(service.getUserById("  " + USER_ID + "  ")).isSameAs(existing);
+        UserResponse response = service.getUserResponseById("  " + USER_ID + "  ");
+        assertThat(response.email()).isEqualTo(existing.getEmail());
+        assertThat(response.userId()).isEqualTo(PUBLIC_ID);
     }
 
     @Test
     void anUnknownIdIsReported() {
         when(userRepository.findByAwsId(USER_ID)).thenReturn(null);
 
-        assertThatThrownBy(() -> service.getUserById(USER_ID))
+        assertThatThrownBy(() -> service.getUserResponseById(USER_ID))
                 .isInstanceOf(FatumUserException.class)
                 .hasMessage(FatumUserException.USER_NOT_FOUND);
     }
 
     @Test
     void aBlankIdNeverReachesARealLookup() {
-        assertThatThrownBy(() -> service.getUserById("   "))
+        assertThatThrownBy(() -> service.getUserResponseById("   "))
                 .isInstanceOf(FatumUserException.class)
                 .hasMessage(FatumUserException.USER_NOT_FOUND);
     }
@@ -231,14 +234,15 @@ class UserServiceTest {
         User existing = Fixtures.user();
         when(userRepository.findByUsernameIgnoreCase(existing.getUsername())).thenReturn(existing);
 
-        assertThat(service.getUserByUsername(existing.getUsername())).isSameAs(existing);
+        UserResponse response = service.getActiveUserResponseByUsername(existing.getUsername());
+        assertThat(response.username()).isEqualTo(existing.getUsername());
     }
 
     @Test
     void anUnknownUsernameIsReported() {
         when(userRepository.findByUsernameIgnoreCase("ghost")).thenReturn(null);
 
-        assertThatThrownBy(() -> service.getUserByUsername("ghost"))
+        assertThatThrownBy(() -> service.getActiveUserResponseByUsername("ghost"))
                 .isInstanceOf(FatumUserException.class)
                 .hasMessage(FatumUserException.USER_NOT_FOUND);
     }
@@ -248,24 +252,26 @@ class UserServiceTest {
         User existing = Fixtures.user();
         when(userRepository.findByEmailIgnoreCase(existing.getEmail())).thenReturn(existing);
 
-        assertThat(service.getUserByEmail(existing.getEmail())).isSameAs(existing);
+        UserResponse response = service.getUserResponseByEmail(existing.getEmail());
+        assertThat(response.email()).isEqualTo(existing.getEmail());
     }
 
     @Test
     void anUnknownEmailIsReported() {
         when(userRepository.findByEmailIgnoreCase("ghost@fatum.com")).thenReturn(null);
 
-        assertThatThrownBy(() -> service.getUserByEmail("ghost@fatum.com"))
+        assertThatThrownBy(() -> service.getUserResponseByEmail("ghost@fatum.com"))
                 .isInstanceOf(FatumUserException.class)
                 .hasMessage(FatumUserException.USER_NOT_FOUND);
     }
 
     @Test
     void searchesByName() {
-        List<User> expected = List.of(Fixtures.user());
-        when(userRepository.findByNameIgnoreCase("Jane Doe")).thenReturn(expected);
+        when(userRepository.findByNameIgnoreCase("Jane Doe")).thenReturn(List.of(Fixtures.user()));
 
-        assertThat(service.getUsersByName(" Jane Doe ")).isEqualTo(expected);
+        List<UserResponse> results = service.getUserResponsesByName(" Jane Doe ");
+        assertThat(results).hasSize(1);
+        assertThat(results.getFirst().name()).isEqualTo("Jane Doe");
     }
 
     @Test
@@ -273,16 +279,16 @@ class UserServiceTest {
         when(userRepository.findByNameIgnoreCaseAndIsActive("Jane Doe", true))
                 .thenReturn(List.of(Fixtures.user()));
 
-        assertThat(service.getActiveUsersByName(" Jane Doe ")).hasSize(1);
+        assertThat(service.getActiveUserResponsesByName(" Jane Doe ")).hasSize(1);
     }
 
     @Test
     void aDeactivatedAccountIsRefusedAsInactive() {
         User deactivated = Fixtures.user();
         deactivated.deactivate();
-        when(userRepository.findByAwsId(USER_ID)).thenReturn(deactivated);
+        when(userRepository.findByEmailIgnoreCase(deactivated.getEmail())).thenReturn(deactivated);
 
-        assertThatThrownBy(() -> service.getActiveUserById(USER_ID))
+        assertThatThrownBy(() -> service.getActiveUserResponseByEmail(deactivated.getEmail()))
                 .isInstanceOf(FatumUserException.class)
                 .hasMessage(FatumUserException.INACTIVE);
     }
@@ -292,7 +298,8 @@ class UserServiceTest {
         User existing = Fixtures.user();
         when(userRepository.findByEmailIgnoreCase(existing.getEmail())).thenReturn(existing);
 
-        assertThat(service.getActiveUserByEmail(existing.getEmail())).isSameAs(existing);
+        UserResponse response = service.getActiveUserResponseByEmail(existing.getEmail());
+        assertThat(response.email()).isEqualTo(existing.getEmail());
     }
 
     @Test
@@ -303,7 +310,9 @@ class UserServiceTest {
         when(userRepository.findByRoleAndIsActive(UserRole.PROFESSIONAL, true))
                 .thenReturn(List.of(professional));
 
-        assertThat(service.getProfessionals()).containsExactly(professional);
+        List<UserResponse> results = service.getProfessionalResponses();
+        assertThat(results).hasSize(1);
+        assertThat(results.getFirst().role()).isEqualTo(UserRole.PROFESSIONAL);
     }
 
     @Test

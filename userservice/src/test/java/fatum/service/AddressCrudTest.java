@@ -221,7 +221,7 @@ class AddressCrudTest {
     void replacesTheLastAddressOfAProfessionalWithoutBreaking() throws FatumUserException {
         users.save(aUser());
         service.addAddress("aws-1", address("Calle 1", "Bogota"));
-        User professional = service.getUserById("aws-1");
+        User professional = users.findByAwsId("aws-1");
         professional.setRole(UserRole.PROFESSIONAL);
         users.save(professional);
 
@@ -236,7 +236,7 @@ class AddressCrudTest {
     void aProfessionalCannotBeLeftWithoutAddresses() throws FatumUserException {
         users.save(aUser());
         service.addAddress("aws-1", address("Calle 1", "Bogota"));
-        User professional = service.getUserById("aws-1");
+        User professional = users.findByAwsId("aws-1");
         professional.setRole(UserRole.PROFESSIONAL);
         users.save(professional);
 
