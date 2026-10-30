@@ -11,6 +11,7 @@ import lombok.AccessLevel;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.UuidGenerator;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -90,9 +91,8 @@ public class User {
     @Column(name = "DOCUMENT_TYPE", nullable = false, length = 20)
     private DocumentType documentType;
 
-    @GeneratedValue(strategy = GenerationType.UUID)
-    @EqualsAndHashCode.Include
-    @Column(name = "ID", length = 36)
+    @UuidGenerator
+    @Column(name = "ID", nullable = false, unique = true, length = 36)
     private String userId;
 
 
