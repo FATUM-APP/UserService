@@ -99,7 +99,7 @@ public class EventPublisherService {
      */
     public void activeStatusChanged(String userId, String userEmail, boolean isActive, UserRole userRole) {
         publish(ACTIVE_STATUS_CHANGED, Map.of(
-                "awsId", userId,
+                "userId", userId,
                 "userEmail", userEmail,
                 "userRole", userRole.name(),
                 "isActive", isActive
