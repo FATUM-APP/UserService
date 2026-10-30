@@ -39,6 +39,7 @@ public class UserMapper {
                 .toArray(AddressDTO[]::new);
 
         return new UserResponse(
+                user.getUserId(),
                 user.getEmail(),
                 user.getName(),
                 user.getBirthDate(),

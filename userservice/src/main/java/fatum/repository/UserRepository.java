@@ -29,6 +29,8 @@ public interface UserRepository extends JpaRepository<User, String> {
 
     List<User> findByNameIgnoreCase(String name);
 
+    User findByUserId(String userId);
+
     @Query("SELECT u FROM User u LEFT JOIN FETCH u.addressList WHERE u.role = :role AND u.isActive = :isActive")
     List<User> findByRoleAndIsActive(@Param("role") UserRole role, @Param("isActive") boolean isActive);
 
