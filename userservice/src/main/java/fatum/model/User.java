@@ -33,6 +33,10 @@ public class User {
     @Column(name = "AWS_ID", nullable = false, length = 255)
     private String awsId;
 
+    @UuidGenerator
+    @Column(name = "ID", nullable = false, unique = true, length = 36)
+    private String userId;
+
     @Column(name = "EMAIL", nullable = false, unique = true, length = 100)
     private String email;
 
@@ -91,9 +95,7 @@ public class User {
     @Column(name = "DOCUMENT_TYPE", nullable = false, length = 20)
     private DocumentType documentType;
 
-    @UuidGenerator
-    @Column(name = "ID", nullable = false, unique = true, length = 36)
-    private String userId;
+
 
 
     private User(Builder builder) throws FatumUserException {
