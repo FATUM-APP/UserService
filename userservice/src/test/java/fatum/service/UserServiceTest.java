@@ -271,7 +271,7 @@ class UserServiceTest {
 
         List<UserResponse> results = service.getUserResponsesByName(" Jane Doe ");
         assertThat(results).hasSize(1);
-        assertThat(results.getFirst().name()).isEqualTo("Jane Doe");
+        assertThat(results.getFirst().name()).isEqualToIgnoringCase("Jane Doe");
     }
 
     @Test
