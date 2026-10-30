@@ -34,9 +34,13 @@ public class SecurityConfig {
                                 "/users/register"
                         ).permitAll()
 
+
+
                         // The panel of the platform is behind the administrator group.
                         .requestMatchers("/admin/**").hasRole("ADMIN")
                         .requestMatchers("/users/upgrade/**").hasRole("VERIFIED")
+                        // Endpoint(s) que el cliente M2M puede llamar
+                        .requestMatchers(HttpMethod.GET, "/users/by-id/**").hasAuthority("SCOPE_api.catalog/read")
                         .anyRequest().authenticated()
 
                 )
@@ -50,14 +54,24 @@ public class SecurityConfig {
 
     @Bean
     public JwtAuthenticationConverter jwtAuthenticationConverter() {
-        JwtGrantedAuthoritiesConverter grantedAuthoritiesConverter = new JwtGrantedAuthoritiesConverter();
+        JwtGrantedAuthoritiesConverter groupsConverter = new JwtGrantedAuthoritiesConverter();
         // The groups of the pool travel in this claim; Spring reads the authorities from there.
-        grantedAuthoritiesConverter.setAuthoritiesClaimName("cognito:groups");
+        groupsConverter.setAuthoritiesClaimName("cognito:groups");
         // The ROLE_ prefix is what hasRole() expects.
-        grantedAuthoritiesConverter.setAuthorityPrefix("ROLE_");
+        groupsConverter.setAuthorityPrefix("ROLE_");
+
+        // Convierte scope -> SCOPE_* (para clientes M2M)
+        JwtGrantedAuthoritiesConverter scopeConverter = new JwtGrantedAuthoritiesConverter();
+        scopeConverter.setAuthoritiesClaimName("scope");
+        scopeConverter.setAuthorityPrefix("SCOPE_");
 
         JwtAuthenticationConverter jwtAuthenticationConverter = new JwtAuthenticationConverter();
-        jwtAuthenticationConverter.setJwtGrantedAuthoritiesConverter(grantedAuthoritiesConverter);
+        jwtAuthenticationConverter.setJwtGrantedAuthoritiesConverter(jwt -> {
+            var authorities = new java.util.HashSet<org.springframework.security.core.GrantedAuthority>();
+            authorities.addAll(groupsConverter.convert(jwt));
+            authorities.addAll(scopeConverter.convert(jwt));
+            return authorities;
+        });
         return jwtAuthenticationConverter;
     }
 }

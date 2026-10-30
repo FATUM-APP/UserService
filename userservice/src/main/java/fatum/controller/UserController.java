@@ -26,8 +26,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
-import static fatum.dto.mapper.UserMapper.toResponse;
-import static fatum.dto.mapper.UserMapper.toResponseList;
+import static fatum.dto.mapper.UserMapper.*;
 
 /**
  * The account of the caller and the public lookups.
@@ -112,10 +111,10 @@ public class UserController {
     }
 
     @GetMapping("/by-id/{id}")
-    public ResponseEntity<UserResponse> getUserById(@PathVariable String id)
+    public ResponseEntity<M2User> getUserById(@PathVariable String id)
             throws FatumUserException {
         return ResponseEntity.status(HttpStatus.OK)
-                .body(toResponse(userService.getUserByUserId(id)));
+                .body(toM2Response(userService.getUserByUserId(id)));
     }
 
     /**

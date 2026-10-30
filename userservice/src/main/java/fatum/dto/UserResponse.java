@@ -1,6 +1,5 @@
 package fatum.dto;
 
-import fatum.model.constant.Country;
 import fatum.model.constant.DocumentType;
 import fatum.model.constant.Gender;
 import fatum.model.constant.UserRole;
@@ -9,7 +8,7 @@ import fatum.model.constant.VerificationStatus;
 import java.time.LocalDate;
 
 public record UserResponse(
-        String userId,
+        String id,
         String email,
         String name,
         LocalDate birthDate,
