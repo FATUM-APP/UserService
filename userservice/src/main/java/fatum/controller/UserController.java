@@ -111,6 +111,13 @@ public class UserController {
                 .body(toResponse(userService.getUserById(awsId)));
     }
 
+    @GetMapping("/{id}")
+    public ResponseEntity<UserResponse> getUserById(@PathVariable String id)
+            throws FatumUserException {
+        return ResponseEntity.status(HttpStatus.OK)
+                .body(toResponse(userService.getUserByUserId(id)));
+    }
+
     /**
      * The three lookups below answer about other accounts, so they only hand out the ones that are
      * active: a deactivated account is refused with {@code INACTIVE} instead of shown. The

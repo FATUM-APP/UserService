@@ -86,6 +86,14 @@ public class UserService {
         return user;
     }
 
+    public User getUserByUserId(String userId) throws FatumUserException {
+        User user = userRepository.findByUserId(TextNormalizer.trimOrNull(userId));
+        if (user == null) {
+            throw new FatumUserException(FatumUserException.USER_NOT_FOUND);
+        }
+        return user;
+    }
+
     /**
      * Check if a user exists by its id.
      * @param awsId

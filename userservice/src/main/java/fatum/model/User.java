@@ -93,7 +93,7 @@ public class User {
     @GeneratedValue(strategy = GenerationType.UUID)
     @EqualsAndHashCode.Include
     @Column(name = "ID", length = 36)
-    private String id;
+    private String userId;
 
 
     private User(Builder builder) throws FatumUserException {
