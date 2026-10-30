@@ -111,7 +111,7 @@ public class UserController {
                 .body(toResponse(userService.getUserById(awsId)));
     }
 
-    @GetMapping("/{id}")
+    @GetMapping("/by-id/{id}")
     public ResponseEntity<UserResponse> getUserById(@PathVariable String id)
             throws FatumUserException {
         return ResponseEntity.status(HttpStatus.OK)
