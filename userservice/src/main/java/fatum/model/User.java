@@ -90,6 +90,11 @@ public class User {
     @Column(name = "DOCUMENT_TYPE", nullable = false, length = 20)
     private DocumentType documentType;
 
+    @GeneratedValue(strategy = GenerationType.UUID)
+    @EqualsAndHashCode.Include
+    @Column(name = "ID", length = 36)
+    private String id;
+
 
     private User(Builder builder) throws FatumUserException {
         this.awsId = requireText(builder.awsId);
