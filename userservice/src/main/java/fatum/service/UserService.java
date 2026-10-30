@@ -78,6 +78,8 @@ public class UserService {
      * @return user or null
      * @throws FatumUserException if the user is not found
      */
+
+    @Transactional(readOnly = true)
     public User getUserById(String awsId) throws FatumUserException {
         User user = userRepository.findByAwsId(TextNormalizer.trimOrNull(awsId));
         if (user == null) {
@@ -86,6 +88,8 @@ public class UserService {
         return user;
     }
 
+
+    @Transactional(readOnly = true)
     public User getUserByUserId(String userId) throws FatumUserException {
         User user = userRepository.findByUserId(TextNormalizer.trimOrNull(userId));
         if (user == null) {
