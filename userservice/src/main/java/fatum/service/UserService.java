@@ -79,7 +79,7 @@ public class UserService {
      * @throws FatumUserException if the user is not found
      */
 
-    @Transactional(readOnly = true)
+
     public User getUserById(String awsId) throws FatumUserException {
         User user = userRepository.findByAwsId(TextNormalizer.trimOrNull(awsId));
         if (user == null) {
@@ -89,7 +89,7 @@ public class UserService {
     }
 
 
-    @Transactional(readOnly = true)
+
     public User getUserByUserId(String userId) throws FatumUserException {
         User user = userRepository.findByUserId(TextNormalizer.trimOrNull(userId));
         if (user == null) {
@@ -681,5 +681,11 @@ public class UserService {
         User saved = userRepository.save(user);
         eventPublisherService.activeStatusChanged(saved.getUserId(), email, true, saved.getRole());
     }
+
+    //================================================================================================================
+    //                                              HELPERS
+    //===============================================================================================================
+
+
 
 }
