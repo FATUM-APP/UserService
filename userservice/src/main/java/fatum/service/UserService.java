@@ -51,7 +51,7 @@ public class UserService {
     public User createUser(CreateUserRequest newUserRequest) throws FatumUserException {
         User newUser = UserMapper.toEntity(newUserRequest);
         User saved = userRepository.save(newUser);
-        eventPublisherService.verificationStatusChanged(saved.getAwsId(),saved.getEmail(),saved.getVerificationStatus());
+        eventPublisherService.verificationStatusChanged(saved.getUserId(),saved.getEmail(),saved.getVerificationStatus());
         return saved;
     }
 
@@ -383,7 +383,7 @@ public class UserService {
         user.makePrincipalAddress(address);
         userRepository.save(user);
         setUserRole(awsId, UserRole.PROFESSIONAL);
-        eventPublisherService.professionalPrincipalAddressChanged(awsId, user.getEmail(), address.getAlias());
+        eventPublisherService.professionalPrincipalAddressChanged(user.getUserId(), user.getEmail(), address.getAlias());
     }
 
     public void becomeProfessional(String awsId) throws FatumUserException {
@@ -410,9 +410,9 @@ public class UserService {
         user.setRole(role);
         userRepository.save(user);
         if (role == UserRole.PROFESSIONAL) {
-            eventPublisherService.userBecameProfessional(awsId, user.getEmail());
+            eventPublisherService.userBecameProfessional(user.getUserId(), user.getEmail());
         } else if (previousRole == UserRole.PROFESSIONAL) {
-            eventPublisherService.professionalBecameClient(awsId, user.getEmail());
+            eventPublisherService.professionalBecameClient(user.getUserId(), user.getEmail());
         }
     }
 
@@ -438,9 +438,9 @@ public class UserService {
         UserRole previousRole = user.getRole();
         user.markVerificationStatus(status);
         userRepository.save(user);
-        eventPublisherService.verificationStatusChanged(awsId, user.getEmail(), user.getVerificationStatus());
+        eventPublisherService.verificationStatusChanged(user.getUserId(), user.getEmail(), user.getVerificationStatus());
         if (previousRole == UserRole.PROFESSIONAL && user.getRole() == UserRole.CLIENT) {
-            eventPublisherService.professionalBecameClient(awsId, user.getEmail());
+            eventPublisherService.professionalBecameClient(user.getUserId(), user.getEmail());
         }
         return user;
     }
@@ -656,7 +656,7 @@ public class UserService {
         User user = getUserByEmail(email);
         user.deactivate();
         User saved = userRepository.save(user);
-        eventPublisherService.activeStatusChanged(saved.getAwsId(), email, false, saved.getRole());
+        eventPublisherService.activeStatusChanged(saved.getUserId(), email, false, saved.getRole());
     }
 
     /**
@@ -675,7 +675,7 @@ public class UserService {
         User user = getUserByEmail(email);
         user.activate();
         User saved = userRepository.save(user);
-        eventPublisherService.activeStatusChanged(saved.getAwsId(), email, true, saved.getRole());
+        eventPublisherService.activeStatusChanged(saved.getUserId(), email, true, saved.getRole());
     }
 
 }
