@@ -4,7 +4,6 @@ import fatum.dto.*;
 import fatum.dto.mapper.UserMapper;
 import fatum.exception.FatumUserException;
 import fatum.model.User;
-import fatum.model.constant.VerificationStatus;
 import fatum.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;

@@ -1,11 +1,8 @@
 package fatum.model;
 
+import fatum.common.enum.user.*;
 import fatum.exception.FatumUserException;
-import fatum.model.constant.Country;
 import fatum.model.constant.DocumentType;
-import fatum.model.constant.Gender;
-import fatum.model.constant.UserRole;
-import fatum.model.constant.VerificationStatus;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.EqualsAndHashCode;

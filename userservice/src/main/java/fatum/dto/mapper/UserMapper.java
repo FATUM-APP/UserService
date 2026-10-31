@@ -1,15 +1,12 @@
 package fatum.dto.mapper;
 
-import fatum.dto.AddressDTO;
 import fatum.dto.CreateUserRequest;
-import fatum.dto.M2User;
+import fatum.common.dto.user.M2User;
 import fatum.dto.UserResponse;
 import fatum.exception.FatumUserException;
-import fatum.model.Address;
 import fatum.model.User;
 import org.springframework.stereotype.Component;
 
-import java.util.ArrayList;
 import java.util.List;
 
 @Component

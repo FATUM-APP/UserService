@@ -5,8 +5,6 @@ import fatum.exception.FatumUserException;
 import fatum.model.Address;
 import fatum.model.User;
 import fatum.model.constant.DocumentType;
-import fatum.model.constant.Gender;
-import fatum.model.constant.UserRole;
 import fatum.repository.AddressRepository;
 import fatum.repository.UserRepository;
 import org.junit.jupiter.api.Test;

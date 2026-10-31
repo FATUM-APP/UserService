@@ -1,7 +1,6 @@
 package fatum.dto;
 
 import fatum.model.constant.DocumentType;
-import fatum.model.constant.Gender;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;

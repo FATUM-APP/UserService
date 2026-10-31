@@ -1,9 +1,6 @@
 package fatum.dto;
 
 import fatum.model.constant.DocumentType;
-import fatum.model.constant.Gender;
-import fatum.model.constant.UserRole;
-import fatum.model.constant.VerificationStatus;
 
 import java.time.LocalDate;
 

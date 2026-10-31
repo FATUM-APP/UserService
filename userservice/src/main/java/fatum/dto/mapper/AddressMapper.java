@@ -1,6 +1,5 @@
 package fatum.dto.mapper;
 
-import fatum.dto.AddressDTO;
 import fatum.dto.NewAddressRequest;
 import fatum.model.Address;
 import fatum.model.User;

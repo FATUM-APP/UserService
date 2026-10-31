@@ -1,6 +1,5 @@
 package fatum.dto;
 
-import fatum.model.constant.UserRole;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;

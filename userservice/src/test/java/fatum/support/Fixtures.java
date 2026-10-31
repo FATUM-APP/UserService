@@ -9,7 +9,6 @@ import fatum.model.DocumentFile;
 import fatum.model.ProfileImage;
 import fatum.model.User;
 import fatum.model.constant.DocumentType;
-import fatum.model.constant.Gender;
 import org.springframework.mock.web.MockMultipartFile;
 
 import java.time.LocalDate;

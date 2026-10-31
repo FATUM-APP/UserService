@@ -1,6 +1,5 @@
 package fatum.controller;
 
-import fatum.dto.AddressDTO;
 import fatum.dto.ApiError;
 import fatum.dto.NewAddressRequest;
 import fatum.dto.mapper.AddressMapper;
