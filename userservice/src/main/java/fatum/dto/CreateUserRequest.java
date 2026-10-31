@@ -1,7 +1,7 @@
 package fatum.dto;
 
 import fatum.model.constant.DocumentType;
-import fatum.model.constant.Gender;
+import fatum.common.enums.user.Gender;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;

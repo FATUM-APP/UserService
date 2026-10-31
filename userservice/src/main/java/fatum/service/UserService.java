@@ -1,7 +1,7 @@
 package fatum.service;
 
 import fatum.dto.CreateUserRequest;
-import fatum.dto.M2User;
+import fatum.common.dto.user.M2User;
 import fatum.dto.NewAddressRequest;
 import fatum.dto.TextNormalizer;
 import fatum.dto.UserResponse;
@@ -11,8 +11,8 @@ import fatum.exception.FatumUserException;
 import fatum.dto.mapper.AddressMapper;
 import fatum.model.Address;
 import fatum.model.User;
-import fatum.model.constant.UserRole;
-import fatum.model.constant.VerificationStatus;
+import fatum.common.enums.user.UserRole;
+import fatum.common.enums.user.VerificationStatus;
 import fatum.repository.AddressRepository;
 import fatum.repository.UserRepository;
 import org.springframework.stereotype.Service;

@@ -27,6 +27,13 @@
         <jacoco.version>0.8.15</jacoco.version>
     </properties>
 
+    <repositories>
+        <repository>
+            <id>github</id>
+            <url>https://maven.pkg.github.com/FATUM-APP/fatum-common</url>
+        </repository>
+    </repositories>
+
     <dependencyManagement>
         <dependencies>
             <dependency>
@@ -150,6 +157,12 @@
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
             <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>fatum</groupId>
+            <artifactId>fatum-common</artifactId>
+            <version>1.0.2</version>
         </dependency>
     </dependencies>
 

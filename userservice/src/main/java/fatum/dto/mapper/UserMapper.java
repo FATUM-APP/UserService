@@ -1,8 +1,8 @@
 package fatum.dto.mapper;
 
-import fatum.dto.AddressDTO;
+import fatum.common.dto.user.AddressDTO;
+import fatum.common.dto.user.M2User;
 import fatum.dto.CreateUserRequest;
-import fatum.dto.M2User;
 import fatum.dto.UserResponse;
 import fatum.exception.FatumUserException;
 import fatum.model.Address;
