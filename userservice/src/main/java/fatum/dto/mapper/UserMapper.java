@@ -2,6 +2,7 @@ package fatum.dto.mapper;
 
 import fatum.dto.AddressDTO;
 import fatum.dto.CreateUserRequest;
+import fatum.dto.M2User;
 import fatum.dto.UserResponse;
 import fatum.exception.FatumUserException;
 import fatum.model.Address;
@@ -52,6 +53,24 @@ public class UserMapper {
                 user.getGender(),
                 user.getDocumentType(),
                 addresses
+        );
+    }
+
+    public static M2User toM2Response(User user)  {
+        if (user == null) return null;
+
+        AddressDTO address = user.hasAddress()
+                ? AddressMapper.toDTO(user.getPrincipalAddress(), user.getName())
+                : null;
+
+        return new M2User(
+                user.getUserId(),
+                user.getBirthDate(),
+                user.getRole(),
+                user.getVerificationStatus(),
+                user.isActive(),
+                user.getGender(),
+                address
         );
     }
 

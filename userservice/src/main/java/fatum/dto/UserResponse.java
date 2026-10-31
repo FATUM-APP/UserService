@@ -1,6 +1,5 @@
 package fatum.dto;
 
-import fatum.model.constant.Country;
 import fatum.model.constant.DocumentType;
 import fatum.model.constant.Gender;
 import fatum.model.constant.UserRole;

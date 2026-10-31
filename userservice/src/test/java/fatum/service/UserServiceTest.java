@@ -1,6 +1,7 @@
 package fatum.service;
 
 import fatum.dto.NewAddressRequest;
+import fatum.dto.UserResponse;
 import fatum.dto.UserUpdateRequest;
 import fatum.exception.FatumUserException;
 import fatum.model.Address;
@@ -38,6 +39,7 @@ import static org.mockito.Mockito.when;
 class UserServiceTest {
 
     private static final String USER_ID = Fixtures.USER_ID;
+    private static final String PUBLIC_ID = Fixtures.PUBLIC_ID;
 
     @Mock
     private UserRepository userRepository;
@@ -73,7 +75,11 @@ class UserServiceTest {
 
     @Test
     void aNewAccountIsStoredAndAnnounced() throws FatumUserException {
-        when(userRepository.save(any(User.class))).thenAnswer(call -> call.getArgument(0));
+        when(userRepository.save(any(User.class))).thenAnswer(call -> {
+            User u = call.getArgument(0);
+            Fixtures.setUserId(u, PUBLIC_ID);
+            return u;
+        });
 
         User stored = service.createUser(Fixtures.createRequest());
 
@@ -82,7 +88,7 @@ class UserServiceTest {
         assertThat(stored.getRole()).isEqualTo(UserRole.CLIENT);
         assertThat(stored.getAddressList()).isEmpty();
         verify(eventPublisherService)
-                .verificationStatusChanged(USER_ID, stored.getEmail(), VerificationStatus.VERIFIED);
+                .verificationStatusChanged(PUBLIC_ID, stored.getEmail(), VerificationStatus.VERIFIED);
     }
 
     // ------------------------------------------------------------------ validate
@@ -202,21 +208,23 @@ class UserServiceTest {
         User existing = Fixtures.user();
         when(userRepository.findByAwsId(USER_ID)).thenReturn(existing);
 
-        assertThat(service.getUserById("  " + USER_ID + "  ")).isSameAs(existing);
+        UserResponse response = service.getUserResponseById("  " + USER_ID + "  ");
+        assertThat(response.email()).isEqualTo(existing.getEmail());
+        assertThat(response.userId()).isEqualTo(PUBLIC_ID);
     }
 
     @Test
     void anUnknownIdIsReported() {
         when(userRepository.findByAwsId(USER_ID)).thenReturn(null);
 
-        assertThatThrownBy(() -> service.getUserById(USER_ID))
+        assertThatThrownBy(() -> service.getUserResponseById(USER_ID))
                 .isInstanceOf(FatumUserException.class)
                 .hasMessage(FatumUserException.USER_NOT_FOUND);
     }
 
     @Test
     void aBlankIdNeverReachesARealLookup() {
-        assertThatThrownBy(() -> service.getUserById("   "))
+        assertThatThrownBy(() -> service.getUserResponseById("   "))
                 .isInstanceOf(FatumUserException.class)
                 .hasMessage(FatumUserException.USER_NOT_FOUND);
     }
@@ -226,14 +234,15 @@ class UserServiceTest {
         User existing = Fixtures.user();
         when(userRepository.findByUsernameIgnoreCase(existing.getUsername())).thenReturn(existing);
 
-        assertThat(service.getUserByUsername(existing.getUsername())).isSameAs(existing);
+        UserResponse response = service.getActiveUserResponseByUsername(existing.getUsername());
+        assertThat(response.username()).isEqualTo(existing.getUsername());
     }
 
     @Test
     void anUnknownUsernameIsReported() {
         when(userRepository.findByUsernameIgnoreCase("ghost")).thenReturn(null);
 
-        assertThatThrownBy(() -> service.getUserByUsername("ghost"))
+        assertThatThrownBy(() -> service.getActiveUserResponseByUsername("ghost"))
                 .isInstanceOf(FatumUserException.class)
                 .hasMessage(FatumUserException.USER_NOT_FOUND);
     }
@@ -243,24 +252,26 @@ class UserServiceTest {
         User existing = Fixtures.user();
         when(userRepository.findByEmailIgnoreCase(existing.getEmail())).thenReturn(existing);
 
-        assertThat(service.getUserByEmail(existing.getEmail())).isSameAs(existing);
+        UserResponse response = service.getUserResponseByEmail(existing.getEmail());
+        assertThat(response.email()).isEqualTo(existing.getEmail());
     }
 
     @Test
     void anUnknownEmailIsReported() {
         when(userRepository.findByEmailIgnoreCase("ghost@fatum.com")).thenReturn(null);
 
-        assertThatThrownBy(() -> service.getUserByEmail("ghost@fatum.com"))
+        assertThatThrownBy(() -> service.getUserResponseByEmail("ghost@fatum.com"))
                 .isInstanceOf(FatumUserException.class)
                 .hasMessage(FatumUserException.USER_NOT_FOUND);
     }
 
     @Test
     void searchesByName() {
-        List<User> expected = List.of(Fixtures.user());
-        when(userRepository.findByNameIgnoreCase("Jane Doe")).thenReturn(expected);
+        when(userRepository.findByNameIgnoreCase("Jane Doe")).thenReturn(List.of(Fixtures.user()));
 
-        assertThat(service.getUsersByName(" Jane Doe ")).isEqualTo(expected);
+        List<UserResponse> results = service.getUserResponsesByName(" Jane Doe ");
+        assertThat(results).hasSize(1);
+        assertThat(results.getFirst().name()).isEqualToIgnoringCase("Jane Doe");
     }
 
     @Test
@@ -268,16 +279,16 @@ class UserServiceTest {
         when(userRepository.findByNameIgnoreCaseAndIsActive("Jane Doe", true))
                 .thenReturn(List.of(Fixtures.user()));
 
-        assertThat(service.getActiveUsersByName(" Jane Doe ")).hasSize(1);
+        assertThat(service.getActiveUserResponsesByName(" Jane Doe ")).hasSize(1);
     }
 
     @Test
     void aDeactivatedAccountIsRefusedAsInactive() {
         User deactivated = Fixtures.user();
         deactivated.deactivate();
-        when(userRepository.findByAwsId(USER_ID)).thenReturn(deactivated);
+        when(userRepository.findByEmailIgnoreCase(deactivated.getEmail())).thenReturn(deactivated);
 
-        assertThatThrownBy(() -> service.getActiveUserById(USER_ID))
+        assertThatThrownBy(() -> service.getActiveUserResponseByEmail(deactivated.getEmail()))
                 .isInstanceOf(FatumUserException.class)
                 .hasMessage(FatumUserException.INACTIVE);
     }
@@ -287,7 +298,8 @@ class UserServiceTest {
         User existing = Fixtures.user();
         when(userRepository.findByEmailIgnoreCase(existing.getEmail())).thenReturn(existing);
 
-        assertThat(service.getActiveUserByEmail(existing.getEmail())).isSameAs(existing);
+        UserResponse response = service.getActiveUserResponseByEmail(existing.getEmail());
+        assertThat(response.email()).isEqualTo(existing.getEmail());
     }
 
     @Test
@@ -298,7 +310,9 @@ class UserServiceTest {
         when(userRepository.findByRoleAndIsActive(UserRole.PROFESSIONAL, true))
                 .thenReturn(List.of(professional));
 
-        assertThat(service.getProfessionals()).containsExactly(professional);
+        List<UserResponse> results = service.getProfessionalResponses();
+        assertThat(results).hasSize(1);
+        assertThat(results.getFirst().role()).isEqualTo(UserRole.PROFESSIONAL);
     }
 
     @Test
@@ -404,7 +418,7 @@ class UserServiceTest {
         service.becomeProfessional(USER_ID);
 
         assertThat(existing.getRole()).isEqualTo(UserRole.PROFESSIONAL);
-        verify(eventPublisherService).userBecameProfessional(USER_ID, existing.getEmail());
+        verify(eventPublisherService).userBecameProfessional(PUBLIC_ID, existing.getEmail());
     }
 
     @Test
@@ -444,8 +458,8 @@ class UserServiceTest {
                 .containsExactly("casa", "vieja");
         assertThat(existing.getPrincipalAddress().getAlias()).isEqualTo("casa");
         verify(eventPublisherService)
-                .professionalPrincipalAddressChanged(USER_ID, existing.getEmail(), "casa");
-        verify(eventPublisherService).userBecameProfessional(USER_ID, existing.getEmail());
+                .professionalPrincipalAddressChanged(PUBLIC_ID, existing.getEmail(), "casa");
+        verify(eventPublisherService).userBecameProfessional(PUBLIC_ID, existing.getEmail());
     }
 
     @Test
@@ -459,7 +473,7 @@ class UserServiceTest {
         service.becomeClient(USER_ID);
 
         assertThat(existing.getRole()).isEqualTo(UserRole.CLIENT);
-        verify(eventPublisherService).professionalBecameClient(USER_ID, existing.getEmail());
+        verify(eventPublisherService).professionalBecameClient(PUBLIC_ID, existing.getEmail());
     }
 
     @Test
@@ -598,7 +612,7 @@ class UserServiceTest {
 
         assertThat(existing.isActive()).isFalse();
         verify(eventPublisherService)
-                .activeStatusChanged(USER_ID, existing.getEmail(), false, UserRole.CLIENT);
+                .activeStatusChanged(PUBLIC_ID, existing.getEmail(), false, UserRole.CLIENT);
     }
 
     @Test
@@ -614,7 +628,7 @@ class UserServiceTest {
 
         assertThat(existing.isActive()).isTrue();
         verify(eventPublisherService)
-                .activeStatusChanged(USER_ID, existing.getEmail(), true, UserRole.PROFESSIONAL);
+                .activeStatusChanged(PUBLIC_ID, existing.getEmail(), true, UserRole.PROFESSIONAL);
     }
 
     // ------------------------------------------------------------- verification
@@ -631,8 +645,8 @@ class UserServiceTest {
         assertThat(updated.getVerificationStatus()).isEqualTo(VerificationStatus.REJECTED);
         assertThat(updated.getRole()).isEqualTo(UserRole.CLIENT);
         verify(eventPublisherService)
-                .verificationStatusChanged(USER_ID, existing.getEmail(), VerificationStatus.REJECTED);
-        verify(eventPublisherService).professionalBecameClient(USER_ID, existing.getEmail());
+                .verificationStatusChanged(PUBLIC_ID, existing.getEmail(), VerificationStatus.REJECTED);
+        verify(eventPublisherService).professionalBecameClient(PUBLIC_ID, existing.getEmail());
     }
 
     @Test
@@ -645,7 +659,7 @@ class UserServiceTest {
 
         assertThat(existing.getRole()).isEqualTo(UserRole.CLIENT);
         verify(eventPublisherService)
-                .verificationStatusChanged(USER_ID, existing.getEmail(), VerificationStatus.UNVERIFIED);
+                .verificationStatusChanged(PUBLIC_ID, existing.getEmail(), VerificationStatus.UNVERIFIED);
         verify(eventPublisherService, never()).professionalBecameClient(anyString(), anyString());
     }
 
@@ -660,7 +674,7 @@ class UserServiceTest {
 
         assertThat(updated.getRole()).isEqualTo(UserRole.CLIENT);
         verify(eventPublisherService)
-                .verificationStatusChanged(USER_ID, existing.getEmail(), VerificationStatus.VERIFIED);
+                .verificationStatusChanged(PUBLIC_ID, existing.getEmail(), VerificationStatus.VERIFIED);
         verify(eventPublisherService, never()).userBecameProfessional(anyString(), anyString());
     }
 

@@ -18,6 +18,7 @@ import java.time.LocalDate;
 public final class Fixtures {
 
     public static final String USER_ID = "aws-user-1";
+    public static final String PUBLIC_ID = "uid-" + USER_ID;
 
     private Fixtures() {
     }
@@ -43,7 +44,7 @@ public final class Fixtures {
     private static User build(String awsId, String email, LocalDate birthDate) {
         int seed = Math.abs(awsId.hashCode());
         try {
-            return new User.Builder()
+            User user = new User.Builder()
                     .awsId(awsId)
                     .email(email)
                     .name("Jane Doe")
@@ -54,8 +55,21 @@ public final class Fixtures {
                     .documentType(DocumentType.ID)
                     .gender(Gender.FEMALE)
                     .build();
+            setUserId(user, "uid-" + awsId);
+            return user;
         } catch (FatumUserException exception) {
             throw new IllegalStateException("The fixture user must be valid", exception);
+        }
+    }
+
+    /** Sets the auto-generated userId on a User built outside Hibernate. */
+    public static void setUserId(User user, String userId) {
+        try {
+            var field = User.class.getDeclaredField("userId");
+            field.setAccessible(true);
+            field.set(user, userId);
+        } catch (ReflectiveOperationException failure) {
+            throw new IllegalStateException("The fixture user needs a userId", failure);
         }
     }
 

@@ -1,6 +1,5 @@
 package fatum.configuration;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -8,11 +7,12 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
-import org.springframework.security.oauth2.jwt.JwtDecoder;
-import org.springframework.security.oauth2.jwt.JwtDecoders;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 import org.springframework.security.web.SecurityFilterChain;
+
+import java.util.HashSet;
 
 @Configuration
 @EnableWebSecurity
@@ -27,8 +27,6 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/swagger-ui.html",
                                 "/swagger-ui/**",
-                                "/swagger-ui/**",
-                                // The path springdoc is configured with in application.yaml.
                                 "/api-docs/**",
                                 "/users/validate-signup",
                                 "/users/register"
@@ -37,6 +35,8 @@ public class SecurityConfig {
                         // The panel of the platform is behind the administrator group.
                         .requestMatchers("/admin/**").hasRole("ADMIN")
                         .requestMatchers("/users/upgrade/**").hasRole("VERIFIED")
+                        // Endpoint(s) que el cliente M2M puede llamar
+                        .requestMatchers(HttpMethod.GET, "/users/by-id/**").hasAuthority("SCOPE_api.catalog/read")
                         .anyRequest().authenticated()
 
                 )
@@ -50,14 +50,23 @@ public class SecurityConfig {
 
     @Bean
     public JwtAuthenticationConverter jwtAuthenticationConverter() {
-        JwtGrantedAuthoritiesConverter grantedAuthoritiesConverter = new JwtGrantedAuthoritiesConverter();
+        JwtGrantedAuthoritiesConverter groupsConverter = new JwtGrantedAuthoritiesConverter();
         // The groups of the pool travel in this claim; Spring reads the authorities from there.
-        grantedAuthoritiesConverter.setAuthoritiesClaimName("cognito:groups");
+        groupsConverter.setAuthoritiesClaimName("cognito:groups");
         // The ROLE_ prefix is what hasRole() expects.
-        grantedAuthoritiesConverter.setAuthorityPrefix("ROLE_");
+        groupsConverter.setAuthorityPrefix("ROLE_");
+
+        JwtGrantedAuthoritiesConverter scopeConverter = new JwtGrantedAuthoritiesConverter();
+        scopeConverter.setAuthoritiesClaimName("scope");
+        scopeConverter.setAuthorityPrefix("SCOPE_");
 
         JwtAuthenticationConverter jwtAuthenticationConverter = new JwtAuthenticationConverter();
-        jwtAuthenticationConverter.setJwtGrantedAuthoritiesConverter(grantedAuthoritiesConverter);
+        jwtAuthenticationConverter.setJwtGrantedAuthoritiesConverter(jwt -> {
+            var authorities = new HashSet<GrantedAuthority>();
+            authorities.addAll(groupsConverter.convert(jwt));
+            authorities.addAll(scopeConverter.convert(jwt));
+            return authorities;
+        });
         return jwtAuthenticationConverter;
     }
 }
