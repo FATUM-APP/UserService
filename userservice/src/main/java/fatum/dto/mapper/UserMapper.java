@@ -7,6 +7,8 @@ import fatum.dto.UserResponse;
 import fatum.exception.FatumUserException;
 import fatum.model.Address;
 import fatum.model.User;
+import fatum.model.constant.UserRole;
+import fatum.model.constant.VerificationStatus;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -66,8 +68,8 @@ public class UserMapper {
         return new M2User(
                 user.getUserId(),
                 user.getBirthDate(),
-                user.getRole(),
-                user.getVerificationStatus(),
+                user.getRole().equals(UserRole.PROFESSIONAL),
+                user.getVerificationStatus().equals(VerificationStatus.VERIFIED),
                 user.isActive(),
                 user.getGender(),
                 address
