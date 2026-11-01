@@ -10,8 +10,8 @@ import java.time.LocalDate;
 public record M2User(
         String userId,
         LocalDate birthDate,
-        UserRole role,
-        VerificationStatus verificationStatus,
+        boolean isProfessional,
+        boolean isVerified,
         boolean isActive,
         Gender gender,
         AddressDTO principalAddress
