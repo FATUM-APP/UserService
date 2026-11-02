@@ -33,18 +33,16 @@ public class AddressMapper {
      * Maps one address.
      *
      * @param address the stored address
-     * @param user    name of the account the address belongs to
      * @return the address as the client sees it, or {@code null} when there is no address
      */
-    public static AddressDTO toDTO(Address address, String user) {
+    public static AddressDTO toDTO(Address address) {
 
         return address != null ?new AddressDTO(
                 address.getResidence(),
                 address.getAlias(),
                 address.getCity(),
                 address.getState(),
-                address.getCountry(),
-                user) : null;
+                address.getCountry()) : null;
     }
 
     /**
@@ -54,9 +52,9 @@ public class AddressMapper {
      * principal address, so this method never sorts nor filters. An address that cannot be mapped
      * keeps its place as {@code null} for the same reason.</p>
      */
-    public static List<AddressDTO> toDTOList(List<Address> addresses, String user) {
+    public static List<AddressDTO> toDTOList(List<Address> addresses) {
         return addresses.stream()
-                .map(address -> toDTO(address, user))
+                .map(address -> toDTO(address))
                 .toList();
     }
 }
