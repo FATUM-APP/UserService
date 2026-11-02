@@ -38,7 +38,7 @@ public class UserMapper {
         if (user == null) return null;
 
         AddressDTO[] addresses = AddressMapper
-                .toDTOList(user.getAddressList(), user.getName())
+                .toDTOList(user.getAddressList())
                 .toArray(AddressDTO[]::new);
 
         return new UserResponse(
@@ -62,11 +62,13 @@ public class UserMapper {
         if (user == null) return null;
 
         AddressDTO address = user.hasAddress()
-                ? AddressMapper.toDTO(user.getPrincipalAddress(), user.getName())
+                ? AddressMapper.toDTO(user.getPrincipalAddress())
                 : null;
 
         return new M2User(
                 user.getUserId(),
+                user.getName(),
+                user.getUsername(),
                 user.getBirthDate(),
                 user.getRole().equals(UserRole.PROFESSIONAL),
                 user.getVerificationStatus().equals(VerificationStatus.VERIFIED),

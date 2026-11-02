@@ -9,6 +9,8 @@ import java.time.LocalDate;
 
 public record M2User(
         String userId,
+        String name,
+        String username,
         LocalDate birthDate,
         boolean isProfessional,
         boolean isVerified,
