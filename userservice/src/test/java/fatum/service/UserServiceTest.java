@@ -88,7 +88,7 @@ class UserServiceTest {
         assertThat(stored.getRole()).isEqualTo(UserRole.CLIENT);
         assertThat(stored.getAddressList()).isEmpty();
         verify(eventPublisherService)
-                .verificationStatusChanged(PUBLIC_ID, stored.getEmail(), VerificationStatus.VERIFIED);
+                .verificationStatusChanged(USER_ID, PUBLIC_ID, stored.getEmail(), VerificationStatus.VERIFIED);
     }
 
     // ------------------------------------------------------------------ validate
@@ -351,7 +351,7 @@ class UserServiceTest {
         assertThat(updated.getUsername()).isEqualTo("newjane");
         assertThat(updated.getPhoneNumber()).isEqualTo("+573001112233");
         assertThat(updated.getRole()).isEqualTo(UserRole.CLIENT);
-        verify(eventPublisherService, never()).userBecameProfessional(anyString(), anyString());
+        verify(eventPublisherService, never()).userBecameProfessional(anyString(), anyString(), anyString());
     }
 
     @Test
@@ -418,7 +418,7 @@ class UserServiceTest {
         service.becomeProfessional(USER_ID);
 
         assertThat(existing.getRole()).isEqualTo(UserRole.PROFESSIONAL);
-        verify(eventPublisherService).userBecameProfessional(PUBLIC_ID, existing.getEmail());
+        verify(eventPublisherService).userBecameProfessional(USER_ID, PUBLIC_ID, existing.getEmail());
     }
 
     @Test
@@ -458,8 +458,8 @@ class UserServiceTest {
                 .containsExactly("casa", "vieja");
         assertThat(existing.getPrincipalAddress().getAlias()).isEqualTo("casa");
         verify(eventPublisherService)
-                .professionalPrincipalAddressChanged(PUBLIC_ID, existing.getEmail(), "casa");
-        verify(eventPublisherService).userBecameProfessional(PUBLIC_ID, existing.getEmail());
+                .professionalPrincipalAddressChanged(USER_ID, PUBLIC_ID, existing.getEmail(), "casa");
+        verify(eventPublisherService).userBecameProfessional(USER_ID, PUBLIC_ID, existing.getEmail());
     }
 
     @Test
@@ -473,7 +473,7 @@ class UserServiceTest {
         service.becomeClient(USER_ID);
 
         assertThat(existing.getRole()).isEqualTo(UserRole.CLIENT);
-        verify(eventPublisherService).professionalBecameClient(PUBLIC_ID, existing.getEmail());
+        verify(eventPublisherService).professionalBecameClient(USER_ID, PUBLIC_ID, existing.getEmail());
     }
 
     @Test
@@ -484,8 +484,8 @@ class UserServiceTest {
 
         service.becomeClient(USER_ID);
 
-        verify(eventPublisherService, never()).professionalBecameClient(anyString(), anyString());
-        verify(eventPublisherService, never()).userBecameProfessional(anyString(), anyString());
+        verify(eventPublisherService, never()).professionalBecameClient(anyString(), anyString(), anyString());
+        verify(eventPublisherService, never()).userBecameProfessional(anyString(), anyString(), anyString());
     }
 
     // ------------------------------------------------------------------- address
@@ -612,7 +612,7 @@ class UserServiceTest {
 
         assertThat(existing.isActive()).isFalse();
         verify(eventPublisherService)
-                .activeStatusChanged(PUBLIC_ID, existing.getEmail(), false, UserRole.CLIENT);
+                .activeStatusChanged(USER_ID, PUBLIC_ID, existing.getEmail(), false, UserRole.CLIENT);
     }
 
     @Test
@@ -628,7 +628,7 @@ class UserServiceTest {
 
         assertThat(existing.isActive()).isTrue();
         verify(eventPublisherService)
-                .activeStatusChanged(PUBLIC_ID, existing.getEmail(), true, UserRole.PROFESSIONAL);
+                .activeStatusChanged(USER_ID, PUBLIC_ID, existing.getEmail(), true, UserRole.PROFESSIONAL);
     }
 
     // ------------------------------------------------------------- verification
@@ -645,8 +645,8 @@ class UserServiceTest {
         assertThat(updated.getVerificationStatus()).isEqualTo(VerificationStatus.REJECTED);
         assertThat(updated.getRole()).isEqualTo(UserRole.CLIENT);
         verify(eventPublisherService)
-                .verificationStatusChanged(PUBLIC_ID, existing.getEmail(), VerificationStatus.REJECTED);
-        verify(eventPublisherService).professionalBecameClient(PUBLIC_ID, existing.getEmail());
+                .verificationStatusChanged(USER_ID, PUBLIC_ID, existing.getEmail(), VerificationStatus.REJECTED);
+        verify(eventPublisherService).professionalBecameClient(USER_ID, PUBLIC_ID, existing.getEmail());
     }
 
     @Test
@@ -659,8 +659,8 @@ class UserServiceTest {
 
         assertThat(existing.getRole()).isEqualTo(UserRole.CLIENT);
         verify(eventPublisherService)
-                .verificationStatusChanged(PUBLIC_ID, existing.getEmail(), VerificationStatus.UNVERIFIED);
-        verify(eventPublisherService, never()).professionalBecameClient(anyString(), anyString());
+                .verificationStatusChanged(USER_ID, PUBLIC_ID, existing.getEmail(), VerificationStatus.UNVERIFIED);
+        verify(eventPublisherService, never()).professionalBecameClient(anyString(), anyString(), anyString());
     }
 
     @Test
@@ -674,8 +674,8 @@ class UserServiceTest {
 
         assertThat(updated.getRole()).isEqualTo(UserRole.CLIENT);
         verify(eventPublisherService)
-                .verificationStatusChanged(PUBLIC_ID, existing.getEmail(), VerificationStatus.VERIFIED);
-        verify(eventPublisherService, never()).userBecameProfessional(anyString(), anyString());
+                .verificationStatusChanged(USER_ID, PUBLIC_ID, existing.getEmail(), VerificationStatus.VERIFIED);
+        verify(eventPublisherService, never()).userBecameProfessional(anyString(), anyString(), anyString());
     }
 
     @Test

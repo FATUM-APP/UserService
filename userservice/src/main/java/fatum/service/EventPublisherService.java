@@ -67,24 +67,37 @@ public class EventPublisherService {
      * <p>The status travels under its own key: with a key named after the role, a consumer reading it
      * would get {@code VERIFIED} where it expected {@code PROFESSIONAL}.</p>
      */
-    public void verificationStatusChanged(String userId, String userEmail, VerificationStatus status) {
+    public void verificationStatusChanged(
+            String awsId,
+            String userId,
+            String userEmail,
+            VerificationStatus status) {
         publish(VERIFICATION_CHANGED, Map.of(
+                    "awsId", awsId,
                 "userId", userId,
                 "userEmail", userEmail,
                 "verificationStatus", status.name()
         ));
     }
 
-    public void userBecameProfessional(String userId, String userEmail) {
+    public void userBecameProfessional(
+            String awsId,
+            String userId,
+            String userEmail) {
         publish(BECAME_PROFESSIONAL, Map.of(
+                "awsId", awsId,
                 "userId", userId,
                 "userEmail", userEmail,
                 "userRole", UserRole.PROFESSIONAL.name()
         ));
     }
 
-    public void professionalBecameClient(String userId, String userEmail) {
+    public void professionalBecameClient(
+            String awsId,
+            String userId,
+            String userEmail) {
         publish(BECAME_CLIENT, Map.of(
+                "awsId", awsId,
                 "userId", userId,
                 "userEmail", userEmail,
                 "userRole", UserRole.CLIENT.name()
@@ -97,8 +110,14 @@ public class EventPublisherService {
      * <p>The role travels with it because giving the access back means restoring the groups, and the
      * consumer has no way to read the role from anywhere else: it only has the event.</p>
      */
-    public void activeStatusChanged(String userId, String userEmail, boolean isActive, UserRole userRole) {
+    public void activeStatusChanged(
+            String awsId,
+            String userId,
+            String userEmail,
+            boolean isActive,
+            UserRole userRole) {
         publish(ACTIVE_STATUS_CHANGED, Map.of(
+                "awsId", awsId,
                 "userId", userId,
                 "userEmail", userEmail,
                 "userRole", userRole.name(),
@@ -107,8 +126,11 @@ public class EventPublisherService {
     }
 
     /** The professional changed which of its addresses is the one that represents it. */
-    public void professionalPrincipalAddressChanged(String userId, String userEmail, String alias) {
+    public void professionalPrincipalAddressChanged(
+            String awsId,
+            String userId, String userEmail, String alias) {
         publish(PRINCIPAL_ADDRESS_CHANGED, Map.of(
+                "awsId", awsId,
                 "userId", userId,
                 "userEmail", userEmail,
                 "addressAlias", alias

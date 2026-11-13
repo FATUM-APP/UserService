@@ -45,7 +45,8 @@ public class UserService {
     public User createUser(CreateUserRequest newUserRequest) throws FatumUserException {
         User newUser = UserMapper.toEntity(newUserRequest);
         User saved = userRepository.save(newUser);
-        eventPublisherService.verificationStatusChanged(saved.getUserId(), saved.getEmail(), saved.getVerificationStatus());
+        eventPublisherService.verificationStatusChanged(
+                saved.getAwsId(),saved.getUserId(), saved.getEmail(), saved.getVerificationStatus());
         return saved;
     }
 
@@ -66,6 +67,11 @@ public class UserService {
     @Transactional(readOnly = true)
     public M2User getM2UserByUserId(String userId) throws FatumUserException {
         return UserMapper.toM2Response(getUserByUserId(userId));
+    }
+
+    @Transactional(readOnly = true)
+    public UserResponse getUserResponseByUserId(String userId) throws FatumUserException {
+        return UserMapper.toResponse(getUserByUserId(userId));
     }
 
     @Transactional(readOnly = true)
@@ -135,7 +141,8 @@ public class UserService {
         user.makePrincipalAddress(address);
         userRepository.save(user);
         setUserRole(awsId, UserRole.PROFESSIONAL);
-        eventPublisherService.professionalPrincipalAddressChanged(user.getUserId(), user.getEmail(), address.getAlias());
+        eventPublisherService.professionalPrincipalAddressChanged(
+                user.getAwsId(),user.getUserId(), user.getEmail(), address.getAlias());
     }
 
     public void becomeProfessional(String awsId) throws FatumUserException {
@@ -156,9 +163,11 @@ public class UserService {
         UserRole previousRole = user.getRole();
         user.markVerificationStatus(status);
         userRepository.save(user);
-        eventPublisherService.verificationStatusChanged(user.getUserId(), user.getEmail(), user.getVerificationStatus());
+        eventPublisherService.verificationStatusChanged(
+                user.getAwsId(),user.getUserId(), user.getEmail(), user.getVerificationStatus());
         if (previousRole == UserRole.PROFESSIONAL && user.getRole() == UserRole.CLIENT) {
-            eventPublisherService.professionalBecameClient(user.getUserId(), user.getEmail());
+            eventPublisherService.professionalBecameClient(
+                    user.getAwsId(),user.getUserId(), user.getEmail());
         }
         return user;
     }
@@ -168,7 +177,8 @@ public class UserService {
         User user = getUserByEmail(email);
         user.deactivate();
         User saved = userRepository.save(user);
-        eventPublisherService.activeStatusChanged(saved.getUserId(), email, false, saved.getRole());
+        eventPublisherService.activeStatusChanged(
+                saved.getAwsId(),saved.getUserId(), email, false, saved.getRole());
     }
 
     @Transactional
@@ -176,7 +186,8 @@ public class UserService {
         User user = getUserByEmail(email);
         user.activate();
         User saved = userRepository.save(user);
-        eventPublisherService.activeStatusChanged(saved.getUserId(), email, true, saved.getRole());
+        eventPublisherService.activeStatusChanged(
+                saved.getAwsId(),saved.getUserId(), email, true, saved.getRole());
     }
 
     //================================================================================================================
@@ -380,9 +391,11 @@ public class UserService {
         user.setRole(role);
         userRepository.save(user);
         if (role == UserRole.PROFESSIONAL) {
-            eventPublisherService.userBecameProfessional(user.getUserId(), user.getEmail());
+            eventPublisherService.userBecameProfessional(
+                    user.getAwsId(),user.getUserId(), user.getEmail());
         } else if (previousRole == UserRole.PROFESSIONAL) {
-            eventPublisherService.professionalBecameClient(user.getUserId(), user.getEmail());
+            eventPublisherService.professionalBecameClient(
+                    user.getAwsId(),user.getUserId(), user.getEmail());
         }
     }
 

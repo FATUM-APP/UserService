@@ -110,6 +110,13 @@ public class UserController {
                 .body(userService.getUserResponseById(awsId));
     }
 
+    @GetMapping("/user/{id}")
+    public ResponseEntity<UserResponse> getUser(@PathVariable String id)
+            throws FatumUserException {
+        return ResponseEntity.status(HttpStatus.OK)
+                .body(userService.getUserResponseByUserId(id));
+    }
+
     @GetMapping("/by-id/{id}")
     public ResponseEntity<M2User> getUserById(@PathVariable String id)
             throws FatumUserException {
