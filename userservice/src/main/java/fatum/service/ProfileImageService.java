@@ -13,6 +13,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.Optional;
+
 /**
  * Profile picture of an account.
  *
@@ -137,4 +139,35 @@ public class ProfileImageService {
             throw new FatumUserException(FatumUserException.INVALID_IMAGE_TYPE);
         }
     }
+
+    @Transactional(readOnly = true)
+    public StoredFileResponse getByUserId(String userId) throws FatumUserException {
+        return findByUserId(userId)
+                .orElseThrow(() -> new FatumUserException(FatumUserException.FILE_NOT_FOUND));
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<StoredFileResponse> findByUserId(String userId) throws FatumUserException {
+        User user = getActiveUserByPublicId(userId);
+        return profileImageRepository.findByUserUserId(user.getUserId()).map(this::toResponse);
+    }
+
+    private User getActiveUserByPublicId(String userId) throws FatumUserException {
+        validatePublicId(userId);
+        User user = userRepository.findByUserId(userId.trim());
+        if (user == null) {
+            throw new FatumUserException(FatumUserException.USER_NOT_FOUND);
+        }
+        if (!user.isActive()) {
+            throw new FatumUserException(FatumUserException.INACTIVE);
+        }
+        return user;
+    }
+
+    private void validatePublicId(String userId) throws FatumUserException {
+        if (userId == null || userId.isBlank()) {
+            throw new FatumUserException(FatumUserException.NULL_VALUE);
+        }
+    }
+
 }

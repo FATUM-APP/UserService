@@ -10,4 +10,5 @@ import java.util.Optional;
 public interface ProfileImageRepository extends JpaRepository<ProfileImage, String> {
 
     Optional<ProfileImage> findByUserAwsId(String auth0Id);
+    Optional<ProfileImage> findByUserUserId(String userId);
 }

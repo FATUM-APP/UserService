@@ -27,7 +27,6 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 import static fatum.dto.mapper.UserMapper.toResponse;
-import static fatum.dto.mapper.UserMapper.toResponseList;
 
 /**
  * The account of the caller and the public lookups.
@@ -108,7 +107,21 @@ public class UserController {
             throws FatumUserException {
         String awsId = jwt.getSubject();
         return ResponseEntity.status(HttpStatus.OK)
-                .body(toResponse(userService.getUserById(awsId)));
+                .body(userService.getUserResponseById(awsId));
+    }
+
+    @GetMapping("/user/{id}")
+    public ResponseEntity<UserResponse> getUser(@PathVariable String id)
+            throws FatumUserException {
+        return ResponseEntity.status(HttpStatus.OK)
+                .body(userService.getUserResponseByUserId(id));
+    }
+
+    @GetMapping("/by-id/{id}")
+    public ResponseEntity<M2User> getUserById(@PathVariable String id)
+            throws FatumUserException {
+        return ResponseEntity.status(HttpStatus.OK)
+                .body(userService.getM2UserByUserId(id));
     }
 
     /**
@@ -132,7 +145,7 @@ public class UserController {
             @RequestParam("username") String username)
             throws FatumUserException {
         return ResponseEntity.status(HttpStatus.OK)
-                .body(toResponse(userService.getActiveUserByUsername(username)));
+                .body(userService.getActiveUserResponseByUsername(username));
     }
 
     @Operation(summary = "Find an account by email",
@@ -150,7 +163,7 @@ public class UserController {
             @RequestParam("email") String email)
             throws FatumUserException {
         return ResponseEntity.status(HttpStatus.OK)
-                .body(toResponse(userService.getActiveUserByEmail(email)));
+                .body(userService.getActiveUserResponseByEmail(email));
     }
 
     @Operation(summary = "Search accounts by name",
@@ -162,7 +175,7 @@ public class UserController {
             @RequestParam("name") String name)
             throws FatumUserException {
         return ResponseEntity.status(HttpStatus.OK)
-                .body(toResponseList(userService.getActiveUsersByName(name)));
+                .body(userService.getActiveUserResponsesByName(name));
     }
 
     @Operation(summary = "Read the verification state of an account",
@@ -185,7 +198,7 @@ public class UserController {
     public  ResponseEntity<List<UserResponse>> getProfessionals()
             throws FatumUserException {
         return ResponseEntity.status(HttpStatus.OK)
-                .body(toResponseList(userService.getProfessionals()));
+                .body(userService.getProfessionalResponses());
     }
 
     @Operation(summary = "Update the account of the token",
@@ -205,7 +218,7 @@ public class UserController {
             @Valid @RequestBody UserUpdateRequest request) throws FatumUserException {
         String awsId = jwt.getSubject();
         return ResponseEntity.status(HttpStatus.OK)
-                .body(toResponse(userService.updateUser(awsId, request)));
+                .body(userService.updateUserResponse(awsId, request));
     }
 
     @Operation(summary = "Become a professional, with an address",

@@ -19,8 +19,6 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
-import static fatum.dto.mapper.UserMapper.toResponse;
-import static fatum.dto.mapper.UserMapper.toResponseList;
 
 /**
  * The operations only an administrator may run.
@@ -65,7 +63,7 @@ public class AdminUserController {
             @RequestParam("email") String email)
             throws FatumUserException {
         return ResponseEntity.status(HttpStatus.OK)
-                .body(toResponse(userService.getUserByEmail(email)));
+                .body(userService.getUserResponseByEmail(email));
     }
 
     /** Searches by name over every account, active or not. */
@@ -83,7 +81,7 @@ public class AdminUserController {
             @RequestParam("name") String name)
             throws FatumUserException {
         return ResponseEntity.status(HttpStatus.OK)
-                .body(toResponseList(userService.getUsersByName(name)));
+                .body(userService.getUserResponsesByName(name));
     }
 
     /** Takes away the access of an account and every session it had open. */

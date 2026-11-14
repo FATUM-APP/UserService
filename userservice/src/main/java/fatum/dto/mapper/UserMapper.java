@@ -2,10 +2,13 @@ package fatum.dto.mapper;
 
 import fatum.dto.AddressDTO;
 import fatum.dto.CreateUserRequest;
+import fatum.dto.M2User;
 import fatum.dto.UserResponse;
 import fatum.exception.FatumUserException;
 import fatum.model.Address;
 import fatum.model.User;
+import fatum.model.constant.UserRole;
+import fatum.model.constant.VerificationStatus;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -35,10 +38,11 @@ public class UserMapper {
         if (user == null) return null;
 
         AddressDTO[] addresses = AddressMapper
-                .toDTOList(user.getAddressList(), user.getName())
+                .toDTOList(user.getAddressList())
                 .toArray(AddressDTO[]::new);
 
         return new UserResponse(
+                user.getUserId(),
                 user.getEmail(),
                 user.getName(),
                 user.getBirthDate(),
@@ -51,6 +55,26 @@ public class UserMapper {
                 user.getGender(),
                 user.getDocumentType(),
                 addresses
+        );
+    }
+
+    public static M2User toM2Response(User user)  {
+        if (user == null) return null;
+
+        AddressDTO address = user.hasAddress()
+                ? AddressMapper.toDTO(user.getPrincipalAddress())
+                : null;
+
+        return new M2User(
+                user.getUserId(),
+                user.getName(),
+                user.getUsername(),
+                user.getBirthDate(),
+                user.getRole().equals(UserRole.PROFESSIONAL),
+                user.getVerificationStatus().equals(VerificationStatus.VERIFIED),
+                user.isActive(),
+                user.getGender(),
+                address
         );
     }
 

@@ -15,7 +15,6 @@ public record AddressDTO(
         String alias,
         String city,
         String state,
-        String country,
-        String userName
+        String country
 ) {
 }

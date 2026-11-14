@@ -170,12 +170,11 @@ public class AddressController {
     }
 
     private List<AddressDTO> toDTOList(List<Address> addresses) {
-        String owner = addresses.isEmpty() ? null : addresses.getFirst().getUser().getName();
-        return AddressMapper.toDTOList(addresses, owner);
+        return AddressMapper.toDTOList(addresses);
     }
 
     private AddressDTO toDTO(Address address) {
-        return AddressMapper.toDTO(address, address.getUser().getName());
+        return AddressMapper.toDTO(address);
     }
 
 }
