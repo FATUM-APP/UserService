@@ -68,7 +68,7 @@ public class EventPublisherService {
             String userName,
             UserRole role
     ) {
-        publish(VERIFICATION_CHANGED, Map.of(
+        publish(USER_CREATED, Map.of(
                 "userId", userId,
                 "userName", userName,
                 "userRole", role.name()
@@ -86,7 +86,7 @@ public class EventPublisherService {
             String userId,
             String userEmail,
             VerificationStatus status) {
-        publish(USER_CREATED, Map.of(
+        publish(VERIFICATION_CHANGED, Map.of(
                     "awsId", awsId,
                 "userId", userId,
                 "userEmail", userEmail,
