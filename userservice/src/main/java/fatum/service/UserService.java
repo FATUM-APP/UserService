@@ -45,6 +45,8 @@ public class UserService {
     public User createUser(CreateUserRequest newUserRequest) throws FatumUserException {
         User newUser = UserMapper.toEntity(newUserRequest);
         User saved = userRepository.save(newUser);
+        eventPublisherService.userCreated(
+                saved.getUserId(),saved.getName(),saved.getRole());
         eventPublisherService.verificationStatusChanged(
                 saved.getAwsId(),saved.getUserId(), saved.getEmail(), saved.getVerificationStatus());
         return saved;
