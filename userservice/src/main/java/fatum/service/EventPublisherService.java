@@ -37,6 +37,8 @@ public class EventPublisherService {
     /** Who publishes. Rules can filter on it as well. */
     private static final String SOURCE = "fatum.userservice";
 
+    public static final String USER_CREATED = "USER_CREATED";
+
     /** The verification state of an account changed. */
     public static final String VERIFICATION_CHANGED = "USER_VERIFICATION_CHANGED";
     /** An account became a professional. */
@@ -59,6 +61,18 @@ public class EventPublisherService {
         this.eventBridgeClient = eventBridgeClient;
         this.eventBusArn = eventBusArn;
         this.objectMapper = objectMapper;
+    }
+
+    public void userCreated(
+            String userId,
+            String userName,
+            UserRole role
+    ) {
+        publish(USER_CREATED, Map.of(
+                "userId", userId,
+                "userName", userName,
+                "userRole", role.name()
+        ));
     }
 
     /**
